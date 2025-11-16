@@ -1,4 +1,4 @@
-package com.example.driftui.layout
+package com.example.driftui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +13,12 @@ import androidx.compose.foundation.layout.BoxScope
 
 //MARK: - For HStack
 import androidx.compose.ui.unit.dp
+
+// For padding
+import androidx.compose.foundation.layout.padding as foundationPadding
+import androidx.compose.foundation.layout.PaddingValues
+
+
 
 
 // ---------------------------------------------------------
@@ -76,6 +82,7 @@ fun ZStack(
     )
 }
 
+//MAINNNNNNNNNN
 @Composable
 fun DriftView(content: @Composable BoxScope.() -> Unit) {
     Box(
@@ -84,5 +91,68 @@ fun DriftView(content: @Composable BoxScope.() -> Unit) {
         content = content
     )
 }
+/////////////
 
+// ---------------------------------------------------------
+// MARK: - SwiftUI-style Padding
+// ---------------------------------------------------------
 
+fun Modifier.padding(all: Int): Modifier =
+    this.then(
+        foundationPadding(all.dp)
+    )
+
+fun Modifier.padding(horizontal: Int = 0, vertical: Int = 0): Modifier =
+    this.then(
+        foundationPadding(
+            PaddingValues(
+                start = horizontal.dp,
+                end = horizontal.dp,
+                top = vertical.dp,
+                bottom = vertical.dp
+            )
+        )
+    )
+
+fun Modifier.padding(
+    top: Int = 0,
+    bottom: Int = 0,
+    leading: Int = 0,
+    trailing: Int = 0
+): Modifier =
+    this.then(
+        foundationPadding(
+            PaddingValues(
+                start = leading.dp,
+                end = trailing.dp,
+                top = top.dp,
+                bottom = bottom.dp
+            )
+        )
+    )
+
+// ---------------------------------------------------------
+// MARK: - Spacer (SwiftUI-style)
+// ---------------------------------------------------------
+
+@Composable
+fun ColumnScope.Spacer() {
+    androidx.compose.foundation.layout.Spacer(
+        modifier = Modifier.weight(1f)
+    )
+}
+
+@Composable
+fun RowScope.Spacer() {
+    androidx.compose.foundation.layout.Spacer(
+        modifier = Modifier.weight(1f)
+    )
+}
+
+@Composable
+fun Spacer(size: Int) {
+    // Fixed size Spacer
+    androidx.compose.foundation.layout.Spacer(
+        modifier = Modifier.size(size.dp)
+    )
+}
