@@ -18,8 +18,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding as foundationPadding
 import androidx.compose.foundation.layout.PaddingValues
 
+// For background & color
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
 
+// For Shapes
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Shape
 
+//ClipShape
+import androidx.compose.ui.draw.clip
+
+//Frame:
+import androidx.compose.ui.unit.Dp
+
+// Font
+
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material3.Text as MaterialText
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
 
 // ---------------------------------------------------------
 // MARK: - VStack
@@ -130,3 +151,169 @@ fun Modifier.padding(
             )
         )
     )
+
+// ---------------------------------------------------------
+// MARK: - Spacer (SwiftUI-style)
+// ---------------------------------------------------------
+
+@Composable
+fun ColumnScope.Spacer() {
+    androidx.compose.foundation.layout.Spacer(
+        modifier = Modifier.weight(1f)
+    )
+}
+
+@Composable
+fun RowScope.Spacer() {
+    androidx.compose.foundation.layout.Spacer(
+        modifier = Modifier.weight(1f)
+    )
+}
+
+@Composable
+fun Spacer(size: Int) {
+    // Fixed size Spacer
+    androidx.compose.foundation.layout.Spacer(
+        modifier = Modifier.size(size.dp)
+    )
+}
+
+// ---------------------------------------------------------
+// MARK: - SwiftUI Shape DSL
+// ---------------------------------------------------------
+
+
+
+fun Circle(): Shape = CircleShape
+
+fun Capsule(): Shape = RoundedCornerShape(percent = 50)
+
+fun RoundedRectangle(cornerRadius: Int): Shape =
+    RoundedCornerShape(cornerRadius.dp)
+
+//ClipShape:
+
+fun Modifier.clipShape(shape: Shape): Modifier =
+    this.then(clip(shape))
+//Corner-Radius:
+fun Modifier.cornerRadius(radius: Int): Modifier =
+    this.clipShape(RoundedRectangle(radius))
+
+
+// ---------------------------------------------------------
+// MARK: - Background Color (SwiftUI-style)
+// --------------------------------------------------------- 
+fun Modifier.backgroundColor(color: Color): Modifier =
+    this.then(background(color))
+
+// ---------------------------------------------------------
+// MARK: - Frame (SwiftUI-style)
+// ---------------------------------------------------------
+
+
+
+fun Modifier.frame(
+    width: Int? = null,
+    height: Int? = null,
+    minWidth: Int = 0,
+    maxWidth: Int? = null,
+    minHeight: Int = 0,
+    maxHeight: Int? = null
+): Modifier {
+
+    var m = this
+
+    // Width (fixed or ranged)
+    if (width != null) {
+        m = m.then(Modifier.width(width.dp))
+    } else {
+        m = m.then(
+            Modifier.widthIn(
+                min = if (minWidth > 0) minWidth.dp else Dp.Unspecified,
+                max = if (maxWidth != null) maxWidth.dp else Dp.Unspecified
+            )
+        )
+    }
+
+    // Height (fixed or ranged)
+    if (height != null) {
+        m = m.then(Modifier.height(height.dp))
+    } else {
+        m = m.then(
+            Modifier.heightIn(
+                min = if (minHeight > 0) minHeight.dp else Dp.Unspecified,
+                max = if (maxHeight != null) maxHeight.dp else Dp.Unspecified
+            )
+        )
+    }
+
+    return m
+}
+
+// ---------------------------------------------------------
+// MARK: - Font (SwiftUI-style)
+// ---------------------------------------------------------
+
+// Font weights (DriftUI style, no dot syntax)
+val bold = FontWeight.Bold
+val semibold = FontWeight.SemiBold
+val medium = FontWeight.Medium
+val regular = FontWeight.Normal
+val light = FontWeight.Light
+val thin = FontWeight.Thin
+val ultralight = FontWeight.ExtraLight
+val black = FontWeight.Black
+
+// DriftUI System font model and helper (usage: system(size = 18, weight = bold))
+data class SystemFont(
+    val size: Int,
+    val weight: FontWeight = regular
+)
+
+fun system(size: Int, weight: FontWeight = regular): SystemFont =
+    SystemFont(size, weight)
+
+
+// store font metadata in Modifier chain
+private data class FontModifier(val font: SystemFont) : Modifier.Element
+
+fun Modifier.font(font: SystemFont): Modifier =
+    this.then(FontModifier(font))
+
+
+
+
+// DriftUI Text wrapper: it reads FontModifier from the provided modifier and applies style.
+@Composable
+fun Text(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    // Walk modifier chain to find FontModifier (the last one wins if multiple)
+    val fontFromModifier: SystemFont? = remember(modifier) {
+        var found: SystemFont? = null
+        modifier.foldIn(Unit) { _, element ->
+            if (element is FontModifier) {
+                found = element.font
+            }
+            Unit
+        }
+        found
+    }
+
+    val style = if (fontFromModifier != null) {
+        TextStyle(
+            fontSize = fontFromModifier.size.sp,
+            fontWeight = fontFromModifier.weight
+        )
+    } else {
+        TextStyle.Default
+    }
+
+    // Delegate to Material Text with the computed style
+    MaterialText(
+        text = text,
+        modifier = modifier,
+        style = style
+    )
+}
