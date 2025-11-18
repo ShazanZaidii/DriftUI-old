@@ -363,19 +363,20 @@ fun TextField(
     BasicTextField(
         value = text,
         onValueChange = onTextChange,
-        modifier = modifier,
+        modifier = modifier, // use external modifier entirely
         textStyle = TextStyle.Default.copy(fontSize = 16.sp),
         decorationBox = { inner ->
             Box(
                 modifier = Modifier
-                    .cornerRadius(5)
-                    .padding(horizontal = 8, vertical = 8)
-                    .background(Color.lightGray.copy(alpha = 0.3f))
+                    .padding(horizontal = 8, vertical = 8) // inner padding only
             ) {
                 if (text.isEmpty()) {
                     MaterialText(
                         text = placeholder,
-                        style = TextStyle.Default.copy(fontSize = 16.sp, color = Color.Gray)
+                        style = TextStyle.Default.copy(
+                            fontSize = 16.sp,
+                            color = Color.Gray
+                        )
                     )
                 }
                 inner()
@@ -410,20 +411,21 @@ fun SecureField(
     BasicTextField(
         value = text,
         onValueChange = onTextChange,
-        modifier = modifier,
+        modifier = modifier, // use external modifier entirely
         textStyle = TextStyle.Default.copy(fontSize = 16.sp),
         visualTransformation = PasswordVisualTransformation(),
         decorationBox = { inner ->
             Box(
                 modifier = Modifier
-                    .cornerRadius(5)
-                    .padding(horizontal = 8, vertical = 8)
-                    .background(Color.lightGray.copy(alpha = 0.3f))
+                    .padding(horizontal = 8, vertical = 8) // inner padding only
             ) {
                 if (text.isEmpty()) {
                     MaterialText(
                         text = placeholder,
-                        style = TextStyle.Default.copy(fontSize = 16.sp, color = Color.Gray)
+                        style = TextStyle.Default.copy(
+                            fontSize = 16.sp,
+                            color = Color.Gray
+                        )
                     )
                 }
                 inner()
@@ -441,6 +443,7 @@ fun SecureField(
     val b = value.binding()
     SecureField(placeholder, b.value, b.set, modifier)
 }
+
 
 
 
