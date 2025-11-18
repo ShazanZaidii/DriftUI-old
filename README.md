@@ -2,7 +2,7 @@ Till now it supports SwiftUI like:
 1. H,V and ZStacks -Same syntax, but you can wrap these in DriftView{} to center align and start modifying as in SwiftUI
 2. Paddings Example- Text("hello", Modifier.padding(leading = 20)
 3. Background & Color
-4. Shapes, ClipShape
+4. Shapes, ClipShape - Remember clipShape should be used before giving a background color
 5. Frame
 6. font modifier - To use this we need to remove default "import androidx.compose.material3.Text" and add "import com.example.driftui.Text" (if you dont modify)
 7. Images (the file shoud be saved in - app -> src -> main -> res -> drawable -> Your image )
