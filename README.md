@@ -78,6 +78,18 @@ List(items = food, alignment = top, modifier = Modifier.padding(top = 50)) { ite
 ```
 
 12. MVVM (For sample refer - https://github.com/ShazanZaidii/DriftUI/tree/main/MVVM%20Implementation )
+13. NavigationStack and Toolbar
+Implementation:
+<img width="1728" height="1117" alt="Screenshot 2025-11-18 at 10 14 22 PM" src="https://github.com/user-attachments/assets/ed1cbe48-a8b2-4415-b0d6-5cd4fa2f3eac" />
+14. preferredColorScheme:
+
+```
+NavigationStack(Modifier.preferredColorScheme(lightMode // or DarkMode)){
+//Content here
+}
+```
+
+
 
 Steps to Use DriftUI:
 1. Create a new Module of type Android Library
