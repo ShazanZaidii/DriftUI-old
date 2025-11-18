@@ -42,7 +42,9 @@ import kotlin.reflect.KProperty
 import androidx.compose.foundation.clickable
 
 import androidx.lifecycle.ViewModelStoreOwner
+import androidx.compose.material3.TopAppBar
 
+import androidx.compose.material3.ExperimentalMaterial3Api
 // ---------------------------------------------------------------------------------------------
 // COLORS (SwiftUI-style)
 // ---------------------------------------------------------------------------------------------
@@ -57,6 +59,9 @@ private val Magenta   = Color(0xFFFF2D55)
 private val Red       = Color(0xFFFF3B30)
 private val White     = Color(0xFFFFFFFF)
 private val Yellow    = Color(0xFFFFCC00)
+//private val mintGreen = Color(0xFF567779)
+
+
 
 val Color.Companion.black get() = Black
 val Color.Companion.blue get() = Blue
@@ -76,6 +81,8 @@ val Color.Companion.brown get() = Color(0xFFA2845E)
 val Color.Companion.mint get() = Color(0xFF00C7BE)
 val Color.Companion.teal get() = Color(0xFF30B0C7)
 val Color.Companion.indigo get() = Color(0xFF5856D6)
+val Color.Companion.shazan get() = Color(0xFF567779)
+
 
 
 
@@ -545,3 +552,77 @@ inline fun <reified T : ObservableObject> EnvironmentObject(): T {
 inline fun <reified T : ObservableObject> ObservedObject(noinline factory: () -> T): T {
     return remember { factory() }
 }
+
+//------------------------------------------------------------------------------------------------
+// MARK: Toolbar Below:
+// -----------------------------------------------------------------------------------------------
+enum class ToolbarPlacement { Leading, Center, Trailing }
+data class ToolbarEntry(
+    val placement: ToolbarPlacement,
+    val content: @Composable () -> Unit
+)
+
+
+val LocalToolbarState = compositionLocalOf<MutableList<ToolbarEntry>?> { null }
+
+
+
+@Composable
+fun ToolbarItem(
+    placement: ToolbarPlacement,
+    content: @Composable () -> Unit
+) {
+    val state = LocalToolbarState.current
+
+    if (state == null) {
+        // No navigation stack → ignore, optional: show warning
+        return
+    }
+
+    val entry = remember { ToolbarEntry(placement, content) }
+
+    DisposableEffect(state, entry) {
+        state.add(entry)
+        onDispose { state.remove(entry) }
+    }
+}
+
+
+
+@Composable
+fun toolbar(content: @Composable () -> Unit) {
+    content()  // Just run it, ToolbarItem() calls will register themselves
+}
+@OptIn(ExperimentalMaterial3Api::class)
+
+@Composable
+fun NavigationStack(content: @Composable () -> Unit) {
+    val toolbarItems = remember { mutableStateListOf<ToolbarEntry>() }
+
+    CompositionLocalProvider(LocalToolbarState provides toolbarItems) {
+
+        Column(Modifier.fillMaxSize()) {
+
+            // Show toolbar if any items exist
+            if (toolbarItems.isNotEmpty()) {
+                TopAppBar(
+                    title = {
+                        toolbarItems.firstOrNull { it.placement == ToolbarPlacement.Center }?.content?.invoke()
+                    },
+                    navigationIcon = {
+                        toolbarItems.firstOrNull { it.placement == ToolbarPlacement.Leading }?.content?.invoke()
+                    },
+                    actions = {
+                        toolbarItems.filter { it.placement == ToolbarPlacement.Trailing }
+                            .forEach { it.content() }
+                    }
+                )
+            }
+
+            Box(Modifier.fillMaxSize()) {
+                content()
+            }
+        }
+    }
+}
+
