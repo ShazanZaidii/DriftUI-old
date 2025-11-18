@@ -50,6 +50,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.composed
 
 // ---------------------------------------------------------------------------------------------
 // COLORS (SwiftUI-style)
@@ -577,30 +580,27 @@ inline fun <reified T : ObservableObject> ObservedObject(noinline factory: () ->
 }
 
 //------------------------------------------------------------------------------------------------
-// MARK: Toolbar Below:
-// -----------------------------------------------------------------------------------------------
+// MARK: Toolbar Below
+//------------------------------------------------------------------------------------------------
+
 enum class ToolbarPlacement { Leading, Center, Trailing }
+
 data class ToolbarEntry(
     val placement: ToolbarPlacement,
     val content: @Composable () -> Unit
 )
 
-
 val LocalToolbarState = compositionLocalOf<MutableList<ToolbarEntry>?> { null }
 
-
-
+// ---------------------------------------------------------------------
+// ToolbarItem
+// ---------------------------------------------------------------------
 @Composable
 fun ToolbarItem(
     placement: ToolbarPlacement,
     content: @Composable () -> Unit
 ) {
-    val state = LocalToolbarState.current
-
-    if (state == null) {
-        // No navigation stack → ignore, optional: show warning
-        return
-    }
+    val state = LocalToolbarState.current ?: return
 
     val entry = remember { ToolbarEntry(placement, content) }
 
@@ -610,36 +610,115 @@ fun ToolbarItem(
     }
 }
 
-
-
+// ---------------------------------------------------------------------
+// toolbar {} block
+// ---------------------------------------------------------------------
 @Composable
 fun toolbar(content: @Composable () -> Unit) {
-    content()  // Just run it, ToolbarItem() calls will register themselves
+    content() // ToolbarItems register themselves
 }
+
+//------------------------------------------------------------------------------------------------
+// NAVIGATION SYSTEM
+//------------------------------------------------------------------------------------------------
+
+class DriftNavController(private val stack: MutableList<@Composable () -> Unit>) {
+    fun push(screen: @Composable () -> Unit) { stack.add(screen) }
+    fun pop() { if (stack.isNotEmpty()) stack.removeLast() }
+    fun clear() { stack.clear() }
+    fun current(): (@Composable () -> Unit)? = stack.lastOrNull()
+}
+
+val LocalNavController = compositionLocalOf<DriftNavController> {
+    error("NavigationStack not found in composition.")
+}
+
+//------------------------------------------------------------------------------------------------
+// NavigationLink (Title)
+//------------------------------------------------------------------------------------------------
+
+@Composable
+fun NavigationLink(
+    title: String,
+    destination: @Composable () -> Unit
+) {
+    val nav = LocalNavController.current
+
+    Text(
+        title,
+        Modifier.onTapGesture {
+            nav.push(destination)
+        }
+    )
+}
+
+//------------------------------------------------------------------------------------------------
+// NavigationLink (label version)
+//------------------------------------------------------------------------------------------------
+
+@Composable
+fun NavigationLink(
+    destination: @Composable () -> Unit,
+    label: @Composable () -> Unit
+) {
+    val nav = LocalNavController.current
+
+    Box(
+        Modifier.onTapGesture {
+            nav.push(destination)
+        }
+    ) {
+        label()
+    }
+}
+
+//------------------------------------------------------------------------------------------------
+// Navigation Title modifier
+//------------------------------------------------------------------------------------------------
+
+private data class NavigationTitleModifier(val title: String) : Modifier.Element
+
+fun Modifier.navigationTitle(title: String): Modifier =
+    this.then(NavigationTitleModifier(title))
+
+//------------------------------------------------------------------------------------------------
+// NavigationStack
+//------------------------------------------------------------------------------------------------
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NavigationStack(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    // --- 1) read preferredColorScheme() from the modifier, if present
-    var overrideScheme: DriftColorScheme? = null
-    modifier.foldIn(Unit) { _, element ->
-        if (element is PreferredColorSchemeModifier) {
-            overrideScheme = element.scheme
-        }
+    // Navigation stack
+    val navStack = remember { mutableStateListOf<@Composable () -> Unit>() }
+    val navController = remember { DriftNavController(navStack) }
+
+    val currentScreen = navStack.lastOrNull()
+
+    // Read navigationTitle()
+    var navTitle: String? = null
+    modifier.foldIn(Unit) { _, el ->
+        if (el is NavigationTitleModifier) navTitle = el.title
         Unit
     }
 
-    // --- 2) compute whether we should use dark colors
-    // If developer didn't supply a scheme, fall back to system dark state
+    // -----------------------------------------------------------------
+    // Read preferredColorScheme()
+    // -----------------------------------------------------------------
+    var overrideScheme: DriftColorScheme? = null
+    modifier.foldIn(Unit) { _, el ->
+        if (el is PreferredColorSchemeModifier) overrideScheme = el.scheme
+        Unit
+    }
+
     val isDark = when (overrideScheme) {
         DriftColorScheme.Dark -> true
         DriftColorScheme.Light -> false
         null -> isSystemInDarkTheme()
     }
 
-    // --- 3) choose color scheme (light/dark) for this navigation stack only
     val colors = if (isDark) {
         darkColorScheme(
             primary = Color(0xFF88B4B5),
@@ -658,49 +737,106 @@ fun NavigationStack(
         )
     }
 
-    // --- 4) wrap only this NavigationStack in the chosen MaterialTheme
+    // -----------------------------------------------------------------
+    // Wrap in MaterialTheme
+    // -----------------------------------------------------------------
     MaterialTheme(colorScheme = colors) {
-        // --- existing toolbar + content logic (unchanged, just inside the theme)
+
         val toolbarItems = remember { mutableStateListOf<ToolbarEntry>() }
 
-        CompositionLocalProvider(LocalToolbarState provides toolbarItems) {
+        CompositionLocalProvider(
+            LocalToolbarState provides toolbarItems,
+            LocalNavController provides navController
+        ) {
+
             Column(Modifier.fillMaxSize()) {
 
-                // Render toolbar (if present)
+                // ---------------------------------------------------------
+                // Toolbar rendering
+                // ---------------------------------------------------------
                 if (toolbarItems.isNotEmpty()) {
                     TopAppBar(
                         title = {
-                            toolbarItems.firstOrNull { it.placement == ToolbarPlacement.Center }
-                                ?.content?.invoke()
+                            when {
+                                navTitle != null ->
+                                    Text(navTitle!!, Modifier.font(system(20, bold)))
+                                else ->
+                                    toolbarItems.firstOrNull {
+                                        it.placement == ToolbarPlacement.Center
+                                    }?.content?.invoke()
+                            }
                         },
                         navigationIcon = {
-                            toolbarItems.firstOrNull { it.placement == ToolbarPlacement.Leading }
-                                ?.content?.invoke()
+                            toolbarItems.firstOrNull {
+                                it.placement == ToolbarPlacement.Leading
+                            }?.content?.invoke()
                         },
                         actions = {
-                            toolbarItems.filter { it.placement == ToolbarPlacement.Trailing }
-                                .forEach { it.content() }
+                            toolbarItems.filter {
+                                it.placement == ToolbarPlacement.Trailing
+                            }.forEach { it.content() }
                         }
                     )
                 }
 
+                // ---------------------------------------------------------
+                // Screen content
+                // ---------------------------------------------------------
                 Box(Modifier.fillMaxSize()) {
-                    content()
+                    if (currentScreen == null) {
+                        content()
+                    } else {
+                        currentScreen.invoke()
+                    }
                 }
             }
         }
 
-        LaunchedEffect(Unit) {
-            // clear toolbar entries when NavigationStack recomposes/tears down
-            // (keeps toolbar scoped to this NavigationStack)
-            // If you want to be more precise, you can clear on lifecycle events.
-            // This is the same clearing you used earlier.
+        // Cleanup on dispose
+        DisposableEffect(Unit) {
+            onDispose {
+                toolbarItems.clear()
+                navStack.clear()
+            }
         }
     }
 }
 
+//------------------------------------------------------------------------------------------------
+// ScrollView
+//------------------------------------------------------------------------------------------------
 
-// --- preferredColorScheme support (Option A) ------------------------------
+@Composable
+fun ScrollView(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        content = content
+    )
+}
+
+//------------------------------------------------------------------------------------------------
+// onTapGesture
+//------------------------------------------------------------------------------------------------
+
+fun Modifier.onTapGesture(action: () -> Unit): Modifier =
+    composed {
+        Modifier.clickable(
+            indication = null,
+            interactionSource = remember { MutableInteractionSource() }
+        ) {
+            action()
+        }
+    }
+
+//------------------------------------------------------------------------------------------------
+// preferredColorScheme
+//------------------------------------------------------------------------------------------------
+
 enum class DriftColorScheme { Light, Dark }
 
 private data class PreferredColorSchemeModifier(
@@ -710,7 +846,5 @@ private data class PreferredColorSchemeModifier(
 fun Modifier.preferredColorScheme(scheme: DriftColorScheme): Modifier =
     this.then(PreferredColorSchemeModifier(scheme))
 
-// short-hands (so devs can write `.preferredColorScheme(darkMode)`):
 val darkMode = DriftColorScheme.Dark
 val lightMode = DriftColorScheme.Light
-// ------------------------------------------------------------------------
