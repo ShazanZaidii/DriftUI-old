@@ -24,28 +24,41 @@ fun LoginScreenView() {
                 placeholder = "Email",
                 value = viewModel.email,
                 modifier = Modifier
-                    .padding(8)
-                    .background(Color.lightGray)
-                    .cornerRadius(8)
+                    .frame(width = 300, height = 50)
+                    .clipShape(RoundedRectangle(28))   // You can use cornerRadius(28) too
+                    .background(Color.lightGray) // background drawn within clipped bounds
+                    .padding(8) // optional outer padding if you want spacing outside the field
             )
+
 
             SecureField(
                 placeholder = "Password",
-                value = viewModel.password
+                value = viewModel.password,
+                modifier = Modifier
+                    .frame(width = 300, height = 50)
+                    .clipShape(RoundedRectangle(28))
+                    .background(Color.lightGray)
+                    .padding(8)
             )
+
 
 
             if (viewModel.isLoading.value) {
                 Text("Loading…")
             } else {
-                Button(action = { viewModel.login() }) {
-                    Text(
-                        "Login",
-                        modifier = Modifier
-                            .padding(horizontal = 20, vertical = 12)
-                            .foregroundStyle(Color.white)
-                            .background(Color.blue)
-                            .cornerRadius(10)
+                Button(
+                    action = {
+                        viewModel.login()
+                    },
+                    Modifier
+                        .frame(width = 150, height = 50)
+                        .clipShape(Capsule()) // Clip before background
+                        .background(Color(0xFF567779)) // Using the Custom Color
+                ) {
+                    Text("Submit",
+                        Modifier
+                            .foregroundStyle(Color.white) // Using the new Swifty color
+                            .font(system(size = 26, weight = bold))
                     )
                 }
             }
