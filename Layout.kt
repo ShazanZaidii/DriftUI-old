@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Divider as MaterialDivider
 import androidx.compose.material3.Text as MaterialText
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -30,7 +29,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -53,6 +51,31 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.composed
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.Surface
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 
 // ---------------------------------------------------------------------------------------------
 // COLORS (SwiftUI-style)
@@ -333,7 +356,7 @@ fun Text(text: String, modifier: Modifier = Modifier) {
     MaterialText(
         text = text,
         modifier = modifier,
-        style = style
+        style = style,
     )
 }
 
@@ -594,9 +617,13 @@ inline fun <reified T : ObservableObject> ObservedObject(noinline factory: () ->
 }
 
 //------------------------------------------------------------------------------------------------
-// MARK: Toolbar Below  (Option A - screen-local toolbar)
+// MARK: Toolbar Below  (REPLACE START)
 //------------------------------------------------------------------------------------------------
 
+
+// ---------------------------
+// Toolbar model + registration
+// ---------------------------
 enum class ToolbarPlacement { Leading, Center, Trailing }
 
 data class ToolbarEntry(
@@ -604,124 +631,131 @@ data class ToolbarEntry(
     val content: @Composable () -> Unit
 )
 
-// Local that holds toolbar entries for the current NavigationStack
 val LocalToolbarState = compositionLocalOf<MutableList<ToolbarEntry>?> { null }
 
-// Locals for passing styling from toolbar() blocks up to the NavigationStack
-val LocalToolbarForeground = compositionLocalOf<Color?> { null }
-val LocalToolbarBackground = compositionLocalOf<Color?> { null }
+// New composition local: a mutable state holder that toolbar() will write its full layout modifier into.
+// NavigationStack will provide an instance of this mutable state and read it when rendering the toolbar.
+val LocalToolbarLayoutState = compositionLocalOf<MutableState<Modifier?>?> { null }
 
-// ---------------------------------------------------------------------
-// ToolbarItem
-// ---------------------------------------------------------------------
 @Composable
 fun ToolbarItem(
     placement: ToolbarPlacement,
     content: @Composable () -> Unit
 ) {
-    // If there's no LocalToolbarState (no NavigationStack), just return quietly.
     val state = LocalToolbarState.current ?: return
-
-    // Remember entry so it can be removed onDispose
     val entry = remember { ToolbarEntry(placement, content) }
-
     DisposableEffect(state, entry) {
         state.add(entry)
         onDispose { state.remove(entry) }
     }
 }
 
-// ---------------------------------------------------------------------
-// ToolbarStyle modifier (applies to toolbar() block or NavigationStack modifier)
-// ---------------------------------------------------------------------
+// ---------------------------
+// Toolbar style locals + modifier
+// ---------------------------
 private data class ToolbarStyleModifier(
-    val foreground: Color?,
-    val background: Color?
+    val foreground: Color? = null,
+    val background: Color? = null,
+    val elevation: Dp? = null,
+    val contentPadding: Dp? = null
 ) : Modifier.Element
 
 fun Modifier.toolbarStyle(
     foregroundColor: Color? = null,
-    backgroundColor: Color? = null
+    backgroundColor: Color? = null,
+    elevation: Dp? = null,
+    contentPadding: Dp? = null
 ): Modifier = this.then(
     ToolbarStyleModifier(
         foreground = foregroundColor,
-        background = backgroundColor
+        background = backgroundColor,
+        elevation = elevation,
+        contentPadding = contentPadding
     )
 )
 
-// ---------------------------------------------------------------------
-// toolbar {} block
-// - This registers style values (fg/bg) in locals so NavigationStack can pick them up.
-// - Content inside toolbar() should call ToolbarItem()
-// ---------------------------------------------------------------------
+val LocalToolbarForeground = compositionLocalOf<Color?> { null }
+val LocalToolbarBackground = compositionLocalOf<Color?> { null }
+val LocalToolbarElevation = compositionLocalOf<Dp?> { null }
+val LocalToolbarContentPadding = compositionLocalOf<Dp?> { null }
+
+// toolbar {} block — collects style from modifier and provides locals for children.
+// CRITICAL: it also writes the *entire* modifier passed to toolbar(...) into the shared LayoutState so
+// NavigationStack's renderer (which lives above the toolbar in the tree) can use it to size the Surface.
 @Composable
 fun toolbar(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    // read ToolbarStyleModifier from the modifier (if present)
+    // Extract ONLY styling values from modifier for locals (so toolbar children can see colors/elevation/padding)
     var fg: Color? = null
     var bg: Color? = null
+    var elev: Dp? = null
+    var paddingDp: Dp? = null
 
-    modifier.foldIn(Unit) { _, el ->
-        if (el is ToolbarStyleModifier) {
-            fg = el.foreground
-            bg = el.background
+    modifier.foldIn(Unit) { _, element ->
+        if (element is ToolbarStyleModifier) {
+            if (element.foreground != null) fg = element.foreground
+            if (element.background != null) bg = element.background
+            if (element.elevation != null) elev = element.elevation
+            if (element.contentPadding != null) paddingDp = element.contentPadding
         }
         Unit
     }
 
-    // provide the style values to children; the NavigationStack (ancestor) will read these
+    // Write the full layout modifier into the shared LayoutState (if provided by parent NavigationStack)
+    val layoutState = LocalToolbarLayoutState.current
+    DisposableEffect(layoutState, modifier) {
+        // save previous modifier to restore on dispose
+        val previous = layoutState?.value
+        layoutState?.value = modifier
+        onDispose {
+            layoutState?.value = previous
+        }
+    }
+
     CompositionLocalProvider(
         LocalToolbarForeground provides fg,
-        LocalToolbarBackground provides bg
+        LocalToolbarBackground provides bg,
+        LocalToolbarElevation provides elev,
+        LocalToolbarContentPadding provides paddingDp
     ) {
         content()
     }
 }
 
-//------------------------------------------------------------------------------------------------
-// NAVIGATION SYSTEM
-//------------------------------------------------------------------------------------------------
-
-/**
- * Simple drift nav controller wrapping the mutable stack
- */
+// ---------------------------
+// Navigation controller
+// ---------------------------
 class DriftNavController(private val stack: MutableList<@Composable () -> Unit>) {
     fun push(screen: @Composable () -> Unit) { stack.add(screen) }
     fun pop() { if (stack.isNotEmpty()) stack.removeLast() }
-    fun dismiss() = pop()
     fun clear() { stack.clear() }
+    fun dismiss() = pop()
     fun current(): (@Composable () -> Unit)? = stack.lastOrNull()
-    fun canPop(): Boolean = stack.isNotEmpty()
+    fun canPop() = stack.isNotEmpty()
 }
 
-/**
- * CompositionLocal for accessing the nav controller
- */
 val LocalNavController = compositionLocalOf<DriftNavController> {
     error("NavigationStack not found in composition.")
 }
 
-/**
- * SwiftUI-style Dismiss() helper — returns a function that dismisses the current view.
- */
+// SwiftUI-style Dismiss helper
 @Composable
 fun Dismiss(): () -> Unit {
     val nav = LocalNavController.current
     return { nav.dismiss() }
 }
 
-/**
- * NavigationLink - title based
- */
+// ---------------------------
+// NavigationLink variants
+// ---------------------------
 @Composable
 fun NavigationLink(
     title: String,
     destination: @Composable () -> Unit
 ) {
     val nav = LocalNavController.current
-
     Text(
         title,
         Modifier.onTapGesture {
@@ -730,16 +764,12 @@ fun NavigationLink(
     )
 }
 
-/**
- * NavigationLink - label version
- */
 @Composable
 fun NavigationLink(
     destination: @Composable () -> Unit,
     label: @Composable () -> Unit
 ) {
     val nav = LocalNavController.current
-
     Box(
         Modifier.onTapGesture {
             nav.push(destination)
@@ -749,53 +779,159 @@ fun NavigationLink(
     }
 }
 
-// Navigation Title modifier (optional)
+// Navigation title modifier (keeps your existing API)
 private data class NavigationTitleModifier(val title: String) : Modifier.Element
 fun Modifier.navigationTitle(title: String): Modifier =
     this.then(NavigationTitleModifier(title))
 
-// Back Button Hidden modifier (optional)
+// Back button hidden modifier
 private data class BackButtonHiddenModifier(val hidden: Boolean) : Modifier.Element
 fun Modifier.navigationBarBackButtonHidden(hidden: Boolean): Modifier =
     this.then(BackButtonHiddenModifier(hidden))
 
-//------------------------------------------------------------------------------------------------
-// NavigationStack (the central component)
-// - Wraps content in its own MaterialTheme (we already had colorScheme logic earlier in file).
-// - Collects toolbar items from child toolbar() blocks via LocalToolbarState.
-// - Reads toolbarStyle from the NavigationStack modifier as a default (but child toolbar() can override).
-// - Shows an automatic "< Back" text when nav can pop (unless hidden).
-// - Cleans up entries when torn down.
-//------------------------------------------------------------------------------------------------
+// preferredColorScheme modifier (keeps previous)
+enum class DriftColorScheme { Light, Dark }
+private data class PreferredColorSchemeModifier(val scheme: DriftColorScheme) : Modifier.Element
+fun Modifier.preferredColorScheme(scheme: DriftColorScheme): Modifier =
+    this.then(PreferredColorSchemeModifier(scheme))
+
+val darkMode = DriftColorScheme.Dark
+val lightMode = DriftColorScheme.Light
+
+// ---------------------------
+// Custom toolbar renderer
+// ---------------------------
+@Composable
+private fun CustomToolbarSurface(
+    modifier: Modifier = Modifier,
+    navController: DriftNavController,
+    toolbarItems: List<ToolbarEntry>,
+    navTitle: String?,
+    hideBackButton: Boolean
+) {
+    val fg = LocalToolbarForeground.current
+    val bg = LocalToolbarBackground.current
+    val elev = LocalToolbarElevation.current
+    val paddingFromChild = LocalToolbarContentPadding.current
+
+    // Use the provided modifier directly on the Surface. IMPORTANT: the modifier should include width/height/clip.
+    // If the modifier is empty, caller (NavigationStack) will pass a default full-width modifier.
+    Surface(
+        modifier = modifier,
+        color = bg ?: MaterialTheme.colorScheme.surface,
+        tonalElevation = elev ?: 0.dp,
+        shadowElevation = elev ?: 0.dp
+    ) {
+        // Row fills the *Surface* area (fillMaxSize()) so children are constrained to the toolbar size.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (paddingFromChild != null)
+                        Modifier.padding(horizontal = paddingFromChild)
+                    else Modifier.padding(horizontal = 12.dp)
+                ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            // LEADING
+            Box(
+                modifier = Modifier.wrapContentWidth(),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                val leading = toolbarItems.firstOrNull { it.placement == ToolbarPlacement.Leading }
+
+                if (leading != null) {
+                    leading.content()
+                } else if (navController.canPop() && !hideBackButton) {
+                    Text(
+                        "< Back",
+                        Modifier
+                            .padding(start = 8.dp)
+                            .onTapGesture { navController.pop() }
+                            .font(system(16, bold))
+                            .foregroundStyle(fg ?: driftColors.text)
+                    )
+                }
+            }
+
+            // CENTER
+            Box(
+                modifier = Modifier
+                    .weight(1f)          // <-- only center takes remaining space
+                    .wrapContentWidth(Alignment.CenterHorizontally),
+                contentAlignment = Alignment.Center
+            ) {
+                if (navTitle != null) {
+                    Text(navTitle, Modifier.font(system(18, semibold)))
+                } else {
+                    toolbarItems.firstOrNull { it.placement == ToolbarPlacement.Center }
+                        ?.content?.invoke()
+                }
+            }
+
+            // TRAILING
+            Row(
+                modifier = Modifier.wrapContentWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val trailing = toolbarItems.filter { it.placement == ToolbarPlacement.Trailing }
+                trailing.forEach { it.content() }
+            }
+        }
+
+    }
+}
+
+// ---------------------------
+// NavigationStack (uses CustomToolbarSurface)
+// ---------------------------
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NavigationStack(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    // Navigation stack state (list of screens)
+    // --- Navigation state ---
     val navStack = remember { mutableStateListOf<@Composable () -> Unit>() }
     val navController = remember { DriftNavController(navStack) }
     val currentScreen = navStack.lastOrNull()
 
-    // Read navigationTitle() from modifier (optional)
+    // --- Read navigation title (modifier on this NavigationStack instance) ---
     var navTitle: String? = null
     modifier.foldIn(Unit) { _, el ->
         if (el is NavigationTitleModifier) navTitle = el.title
         Unit
     }
 
-    // Read navigationBarBackButtonHidden() from modifier (optional)
+    // --- Read back button hidden ---
     var hideBackButton = false
     modifier.foldIn(Unit) { _, el ->
         if (el is BackButtonHiddenModifier) hideBackButton = el.hidden
         Unit
     }
 
-    // Read preferredColorScheme() from modifier (if present) - reuse your existing PreferredColorSchemeModifier logic
+    // --- Read preferredColorScheme ---
     var overrideScheme: DriftColorScheme? = null
     modifier.foldIn(Unit) { _, el ->
         if (el is PreferredColorSchemeModifier) overrideScheme = el.scheme
+        Unit
+    }
+
+    // --- Read any toolbarStyle applied directly on NavigationStack (nav-level defaults) ---
+    var navToolbarFg: Color? = null
+    var navToolbarBg: Color? = null
+    var navToolbarElev: Dp? = null
+    var navToolbarPadding: Dp? = null
+
+    modifier.foldIn(Unit) { _, el ->
+        if (el is ToolbarStyleModifier) {
+            if (el.foreground != null) navToolbarFg = el.foreground
+            if (el.background != null) navToolbarBg = el.background
+            if (el.elevation != null) navToolbarElev = el.elevation
+            if (el.contentPadding != null) navToolbarPadding = el.contentPadding
+        }
         Unit
     }
 
@@ -805,7 +941,6 @@ fun NavigationStack(
         null -> isSystemInDarkTheme()
     }
 
-    // choose color scheme for this NavigationStack (keeps rest of your file's behavior)
     val colors = if (isDark) {
         darkColorScheme(
             primary = Color(0xFF88B4B5),
@@ -824,97 +959,56 @@ fun NavigationStack(
         )
     }
 
-    // Wrap just this NavStack in the chosen MaterialTheme
     MaterialTheme(colorScheme = colors) {
-
-        // toolbarItems collected from children that call ToolbarItem()
         val toolbarItems = remember { mutableStateListOf<ToolbarEntry>() }
 
-        // Provide the toolbar state & nav controller to descendants
+        // A mutable state that toolbar() children will write their full layout modifier into.
+        // NavigationStack reads this value when rendering the toolbar. This allows toolbar(...) (child)
+        // to define exact height/width/clip, while NavigationStack (parent) renders it.
+        val toolbarLayoutState = remember { mutableStateOf<Modifier?>(null) }
+
+        // Provide both the toolbar registration list and the nav controller to children
         CompositionLocalProvider(
             LocalToolbarState provides toolbarItems,
-            LocalNavController provides navController
+            LocalNavController provides navController,
+            LocalToolbarLayoutState provides toolbarLayoutState // parent provides state that child writes into
         ) {
+            // Also provide the nav-level defaults for toolbar style — child toolbar() can override these
+            CompositionLocalProvider(
+                LocalToolbarForeground provides navToolbarFg,
+                LocalToolbarBackground provides navToolbarBg,
+                LocalToolbarElevation provides navToolbarElev,
+                LocalToolbarContentPadding provides navToolbarPadding
+            ) {
+                Column(Modifier.fillMaxSize()) {
+                    // decide whether toolbar should be shown:
+                    val shouldShowToolbar = toolbarItems.isNotEmpty() || (navController.canPop() && !hideBackButton)
 
-            // pull the most recent child toolbar style locals (if toolbar() was used in current screen)
-            val childFg = LocalToolbarForeground.current
-            val childBg = LocalToolbarBackground.current
+                    if (shouldShowToolbar) {
+                        // Choose layout modifier: toolbar child may have set one into toolbarLayoutState.value.
+                        // Priority: toolbar()'s full modifier (child) > fallback full-width modifier (default).
+                        val layoutModifier = toolbarLayoutState.value ?: Modifier.fillMaxWidth()
 
-            Column(Modifier.fillMaxSize()) {
-
-                // Decide whether we should show the TopAppBar:
-                // - show if there are explicit toolbar items OR
-                // - show if nav can pop (auto-back) and back button is not hidden
-                val shouldShowTopAppBar = toolbarItems.isNotEmpty() || (navController.canPop() && !hideBackButton)
-
-                if (shouldShowTopAppBar) {
-
-                    // Read toolbarStyle() applied to the NavigationStack modifier (default)
-                    var navToolbarFg: Color? = null
-                    var navToolbarBg: Color? = null
-                    modifier.foldIn(Unit) { _, el ->
-                        if (el is ToolbarStyleModifier) {
-                            navToolbarFg = el.foreground
-                            navToolbarBg = el.background
-                        }
-                        Unit
+                        // render our custom toolbar; allow dev to pass modifier to control height/clip/shape etc
+                        CustomToolbarSurface(
+                            modifier = layoutModifier,
+                            navController = navController,
+                            toolbarItems = toolbarItems,
+                            navTitle = navTitle,
+                            hideBackButton = hideBackButton
+                        )
                     }
 
-                    // Final colors: NavigationStack modifier overrides default, but child toolbar() values override NavigationStack
-                    val finalFg = childFg ?: navToolbarFg
-                    val finalBg = childBg ?: navToolbarBg
-
-                    TopAppBar(
-                        colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
-                            containerColor = finalBg ?: MaterialTheme.colorScheme.surface,
-                            titleContentColor = finalFg ?: MaterialTheme.colorScheme.onSurface,
-                            navigationIconContentColor = finalFg ?: MaterialTheme.colorScheme.onSurface,
-                            actionIconContentColor = finalFg ?: MaterialTheme.colorScheme.onSurface
-                        ),
-                        title = {
-                            when {
-                                navTitle != null ->
-                                    Text(navTitle!!, Modifier.font(system(20, bold)))
-                                else ->
-                                    // If dev placed a center toolbar item, call it
-                                    toolbarItems.firstOrNull { it.placement == ToolbarPlacement.Center }?.content?.invoke()
-                            }
-                        },
-                        navigationIcon = {
-                            // If no leading toolbar item provided, show auto back when possible
-                            if (toolbarItems.none { it.placement == ToolbarPlacement.Leading } &&
-                                navController.canPop() &&
-                                !hideBackButton
-                            ) {
-                                Text(
-                                    "< Back",
-                                    Modifier
-                                        .padding(leading = 12)
-                                        .onTapGesture { navController.pop() }
-                                        .font(system(18, bold))
-                                )
-                            } else {
-                                toolbarItems.firstOrNull { it.placement == ToolbarPlacement.Leading }?.content?.invoke()
-                            }
-                        },
-                        actions = {
-                            toolbarItems.filter { it.placement == ToolbarPlacement.Trailing }.forEach { it.content() }
-                        }
-                    )
-                }
-
-                // Screen content area: show root content when nothing on stack; otherwise show top of stack
-                Box(Modifier.fillMaxSize()) {
-                    if (currentScreen == null) {
-                        content()
-                    } else {
-                        currentScreen.invoke()
+                    // content area (root or pushed screen)
+                    Box(Modifier.fillMaxSize()) {
+                        if (currentScreen == null) content()
+                        else currentScreen.invoke()
                     }
                 }
             }
         }
 
-        // Cleanup toolbar entries and nav stack when this NavigationStack leaves composition
+        // Clean up on composition leaving
         DisposableEffect(Unit) {
             onDispose {
                 toolbarItems.clear()
@@ -923,6 +1017,11 @@ fun NavigationStack(
         }
     }
 }
+
+//------------------------------------------------------------------------------------------------
+// MARK: Toolbar Below  (REPLACE END)
+//------------------------------------------------------------------------------------------------
+
 
 //------------------------------------------------------------------------------------------------
 // ScrollView
@@ -952,18 +1051,3 @@ fun Modifier.onTapGesture(action: () -> Unit): Modifier =
             action()
         }
     }
-
-//------------------------------------------------------------------------------------------------
-// preferredColorScheme support (you already had this type earlier in the file)
-//------------------------------------------------------------------------------------------------
-enum class DriftColorScheme { Light, Dark }
-
-private data class PreferredColorSchemeModifier(
-    val scheme: DriftColorScheme
-) : Modifier.Element
-
-fun Modifier.preferredColorScheme(scheme: DriftColorScheme): Modifier =
-    this.then(PreferredColorSchemeModifier(scheme))
-
-val darkMode = DriftColorScheme.Dark
-val lightMode = DriftColorScheme.Light
