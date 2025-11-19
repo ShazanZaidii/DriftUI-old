@@ -625,12 +625,25 @@ fun toolbar(content: @Composable () -> Unit) {
 class DriftNavController(private val stack: MutableList<@Composable () -> Unit>) {
     fun push(screen: @Composable () -> Unit) { stack.add(screen) }
     fun pop() { if (stack.isNotEmpty()) stack.removeLast() }
+
+    // NEW — dismiss() identical to SwiftUI
+    fun dismiss() = pop()
+
     fun clear() { stack.clear() }
     fun current(): (@Composable () -> Unit)? = stack.lastOrNull()
 }
 
 val LocalNavController = compositionLocalOf<DriftNavController> {
     error("NavigationStack not found in composition.")
+}
+
+//------------------------------------------------------------------------------------------------
+// Dismiss (SwiftUI-style)
+//------------------------------------------------------------------------------------------------
+@Composable
+fun Dismiss(): () -> Unit {
+    val nav = LocalNavController.current
+    return { nav.dismiss() }
 }
 
 //------------------------------------------------------------------------------------------------
