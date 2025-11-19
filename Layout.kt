@@ -4,6 +4,11 @@ package com.example.driftui
 // IMPORTS
 // ---------------------------------------------------------------------------------------------
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image as ComposeImage
 import androidx.compose.foundation.background as foundationBackground
 import androidx.compose.foundation.layout.PaddingValues
@@ -76,6 +81,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.graphicsLayer
 
 // ---------------------------------------------------------------------------------------------
 // COLORS (SwiftUI-style)
@@ -108,12 +114,13 @@ val Color.Companion.yellow get() = Yellow
 
 val Color.Companion.pink get() = Color(0xFFCF00FF)
 val Color.Companion.orange get() = Color(0xFFFF9500)
-val Color.Companion.purple get() = Color(0xFFAF52DE)
+val Color.Companion.purple get() = Color(0xFF7D00FF)
 val Color.Companion.brown get() = Color(0xFFA2845E)
 val Color.Companion.mint get() = Color(0xFF00C7BE)
 val Color.Companion.teal get() = Color(0xFF30B0C7)
 val Color.Companion.indigo get() = Color(0xFF5856D6)
 val Color.Companion.shazan get() = Color(0xFF567779)
+
 
 //Default theme colours for modifiers
 
@@ -315,9 +322,27 @@ data class SystemFont(val size: Int, val weight: FontWeight = regular)
 fun system(size: Int, weight: FontWeight = regular) = SystemFont(size, weight)
 
 private data class FontModifier(val font: SystemFont) : Modifier.Element
+
+
 private data class ForegroundColorModifier(val color: Color) : Modifier.Element
 
 private data class BackgroundColorModifier(val color: Color) : Modifier.Element
+
+// --- Toggle styling support ---
+private data class ToggleStyleModifier(
+    val onColor: Color? = null,
+    val offColor: Color? = null,
+    val thumbColor: Color? = null
+) : Modifier.Element
+
+fun Modifier.toggleStyle(
+    onColor: Color? = null,
+    offColor: Color? = null,
+    thumbColor: Color? = null
+): Modifier = this.then(
+    ToggleStyleModifier(onColor, offColor, thumbColor)
+)
+
 
 // convenience modifier for toolbar background specifically (keeps it explicit)
 fun Modifier.toolbarBackground(color: Color) = this.then(BackgroundColorModifier(color))
@@ -588,6 +613,171 @@ fun <T> List(
     }
 }
 
+// =============================================================================================
+// PREMIUM TOGGLE (iOS-grade animation, DriftUI style)
+// =============================================================================================
+
+@Composable
+fun Toggle(
+    isOn: Boolean,
+    onToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    label: (@Composable () -> Unit)? = null
+) {
+    // --- ANIMATION STATE MAGIC ----------------------------------------------
+
+    // Read styling from modifier
+    var styleOn: Color? = null
+    var styleOff: Color? = null
+    var styleThumb: Color? = null
+
+    modifier.foldIn(Unit) { _, el ->
+        if (el is ToggleStyleModifier) {
+            if (el.onColor != null) styleOn = el.onColor
+            if (el.offColor != null) styleOff = el.offColor
+            if (el.thumbColor != null) styleThumb = el.thumbColor
+        }
+        Unit
+    }
+
+
+    // 1. Thumb overshoot animation (bounce on state change)
+    val thumbOffset by animateDpAsState(
+        targetValue = if (isOn) 22.dp else 2.dp,
+        animationSpec = spring(
+            dampingRatio = 0.55f,
+            stiffness = 300f
+        ),
+        label = ""
+    )
+
+    // 2. Thumb scale (pop when toggled)
+    val thumbScale by animateFloatAsState(
+        targetValue = if (isOn) 1.06f else 1.0f,
+        animationSpec = tween(120),
+        label = ""
+    )
+
+    // 3. Track background color
+    val trackColor by animateColorAsState(
+        targetValue = if (isOn)
+            (styleOn ?: driftColors.accent)
+        else
+            (styleOff ?: driftColors.fieldBackground),
+        animationSpec = tween(200),
+        label = ""
+    )
+
+
+    // 4. Track shadow glow when ON
+    val trackShadow = if (isOn) 8.dp else 1.dp
+    val trackShadowColor = if (isOn)
+        driftColors.accent.copy(alpha = 0.35f)
+    else
+        Color.Black.copy(alpha = 0.12f)
+
+    // 5. Thumb color fade
+    val thumbColor by animateColorAsState(
+        targetValue = styleThumb
+            ?: if (isOn) Color.White
+            else Color.White.copy(alpha = 0.85f),
+        animationSpec = tween(180),
+        label = ""
+    )
+
+
+    // 6. Thumb glow when ON
+    val thumbShadow = if (isOn) 10.dp else 0.dp
+
+    // 7. Press gesture scale (tap feedback)
+    var pressed by remember { mutableStateOf(false) }
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.92f else 1.0f,
+        animationSpec = tween(80),
+        label = ""
+    )
+
+    // --- UI -----------------------------------------------------------
+
+    Row(
+        modifier = modifier
+            .wrapContentHeight()
+            .then(Modifier.onTapGesture {
+                pressed = true
+                onToggle(!isOn)
+                // slight delay to release scale animation
+                pressed = false
+            }),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+
+        // Label
+        if (label != null) label()
+
+        // Track
+        Box(
+            modifier = Modifier
+                .size(width = 52.dp, height = 30.dp)
+                .graphicsLayer {
+                    scaleX = pressScale
+                    scaleY = pressScale
+                }
+                .clip(Capsule())
+                .background(trackColor)
+                .shadow(trackShadow, Capsule(), false, trackShadowColor),
+            contentAlignment = Alignment.CenterStart
+        ) {
+
+            // Thumb
+            Box(
+                modifier = Modifier
+                    .offset(x = thumbOffset)
+                    .size(26.dp)
+                    .graphicsLayer {
+                        scaleX = thumbScale
+                        scaleY = thumbScale
+                        shadowElevation = thumbShadow.toPx()
+                    }
+                    .clip(Circle())
+                    .background(thumbColor)
+            )
+        }
+    }
+
+}
+
+
+// --- Overload: State<Boolean>
+@Composable
+fun Toggle(
+    label: String,
+    value: State<Boolean>,
+    modifier: Modifier = Modifier
+) {
+    val b = value.binding()
+    Toggle(isOn = b.value, onToggle = b.set, modifier = modifier) {
+        Text(label)
+    }
+}
+
+// --- Overload: Binding<Boolean>
+@Composable
+fun Toggle(
+    value: Binding<Boolean>,
+    modifier: Modifier = Modifier,
+    label: (@Composable () -> Unit)? = null
+) {
+    Toggle(
+        isOn = value.value,
+        onToggle = { value.set(it) },
+        modifier = modifier,
+        label = label
+    )
+}
+
+
+
 
 // =============================================================================================
 // MVVM (SwiftUI-like)
@@ -617,7 +807,7 @@ inline fun <reified T : ObservableObject> ObservedObject(noinline factory: () ->
 }
 
 //------------------------------------------------------------------------------------------------
-// MARK: Toolbar Below  (REPLACE START)
+// MARK: Toolbar Below
 //------------------------------------------------------------------------------------------------
 
 
