@@ -96,7 +96,19 @@ val dismiss = Dismiss()
 Button(dismiss) { Text("Dismiss" , Modifier.font(system(size = 28, weight = bold)))}
 ```
 
-16. Toolbar with modifiers -
+16. Toolbar with modifiers -       
+
+<img width="1728" height="1117" alt="Screenshot 2025-11-20 at 1 44 09 PM" src="https://github.com/user-attachments/assets/0dbb3a48-4e5a-44e0-a403-e0474cee3b9c" />
+
+
+```
+//**Inside OnCreate**- 
+//Set WindowCompat.setDecorFitsSystemWindows(window, true) to make toolbar be pushed below the camera punch and
+// either WindowCompat.setDecorFitsSystemWindows(window, false)  or just remove this line to make status bAr overlay on Top of Toolbar
+
+
+```
+
 ```
 NavigationStack(Modifier.toolbarStyle(foregroundColor = Color.shazan, backgroundColor = Color.DarkGray)) {
         DriftView {
