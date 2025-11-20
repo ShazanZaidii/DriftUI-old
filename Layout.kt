@@ -88,6 +88,8 @@ import androidx.core.view.WindowCompat
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 
 
 
@@ -428,6 +430,24 @@ fun Modifier.scaleEffect(scale: Float): Modifier =
     })
 
 // ---------------------------------------------------------------------------------------------
+// OPACITY (SwiftUI-style)
+// ---------------------------------------------------------------------------------------------
+
+fun Modifier.opacity(value: Double): Modifier =
+    this.then(
+        Modifier.graphicsLayer {
+            // Converts the Double value (0.0 to 1.0) into the composable's alpha channel
+            alpha = value.toFloat()
+        }
+    )
+
+fun Modifier.opacity(value: Float): Modifier =
+    this.then(
+        Modifier.graphicsLayer {
+            alpha = value
+        }
+    )
+// ---------------------------------------------------------------------------------------------
 // FONT SYSTEM + TEXT
 // ---------------------------------------------------------------------------------------------
 
@@ -465,6 +485,35 @@ fun Modifier.toggleStyle(
     ToggleStyleModifier(onColor, offColor, thumbColor)
 )
 
+
+// --- Slider styling support ---
+private data class SliderStyleModifier(
+    val activeTrackColor: Color? = null,
+    val inactiveTrackColor: Color? = null,
+    val thumbColor: Color? = null,
+    val stepColor: Color? = null,
+    val stepOpacity: Float? = null // Using Float for opacity (0.0 to 1.0)
+) : Modifier.Element
+
+// In Layout.kt (Below the data class)
+
+fun Modifier.sliderStyle(
+    activeTrackColor: Color? = null,
+    inactiveTrackColor: Color? = null,
+    thumbColor: Color? = null,
+    stepColor: Color? = null,
+    // REMOVED: thumbSize: Int? = null,
+    stepOpacity: Double? = null
+): Modifier = this.then(
+    SliderStyleModifier(
+        activeTrackColor = activeTrackColor,
+        inactiveTrackColor = inactiveTrackColor,
+        thumbColor = thumbColor,
+        stepColor = stepColor,
+        // REMOVED: thumbSize = thumbSize?.dp,
+        stepOpacity = stepOpacity?.toFloat()
+    )
+)
 
 // convenience modifier for toolbar background specifically (keeps it explicit)
 fun Modifier.toolbarBackground(color: Color) = this.then(BackgroundColorModifier(color))
@@ -871,34 +920,37 @@ fun Toggle(
 }
 
 
-// --- Overload: State<Boolean>
+// In Layout.kt (Add after the Primary Toggle function)
+
 @Composable
 fun Toggle(
-    label: String,
-    value: State<Boolean>,
-    modifier: Modifier = Modifier
+    value: State<Boolean>, // Accepts the raw state variable (e.g., value = wifi)
+    modifier: Modifier = Modifier,
+    label: @Composable () -> Unit // Trailing lambda for custom content
 ) {
     val b = value.binding()
-    Toggle(isOn = b.value, onToggle = b.set, modifier = modifier) {
-        Text(label)
-    }
-}
-
-// --- Overload: Binding<Boolean>
-@Composable
-fun Toggle(
-    value: Binding<Boolean>,
-    modifier: Modifier = Modifier,
-    label: (@Composable () -> Unit)? = null
-) {
     Toggle(
-        isOn = value.value,
-        onToggle = { value.set(it) },
+        isOn = b.value,
+        onToggle = b.set,
         modifier = modifier,
         label = label
     )
 }
 
+// In Layout.kt (Add after the Custom Content Block overload)
+
+@Composable
+fun Toggle(
+    label: String, // String label for convenience
+    value: State<Boolean>,
+    modifier: Modifier = Modifier
+) {
+    val b = value.binding()
+    Toggle(isOn = b.value, onToggle = b.set, modifier = modifier) {
+        // Renders the string label using the Text composable
+        Text(label)
+    }
+}
 
 
 
@@ -929,6 +981,89 @@ inline fun <reified T : ObservableObject> ObservedObject(noinline factory: () ->
     return remember { factory() }
 }
 
+// Slider (SwiftUI-style)
+
+// In Layout.kt (Replace the first Slider function definition)
+
+@Composable
+fun Slider(
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    range: IntRange = 0..100,
+    step: Int = 0,
+    modifier: Modifier = Modifier
+) {
+    // --- READ STYLING FROM MODIFIER CHAIN ---
+    var styleActiveTrack: Color? = null
+    var styleInactiveTrack: Color? = null
+    var styleThumbColor: Color? = null
+    var styleStepColor: Color? = null
+    var styleThumbSize: Dp? = null
+    var styleStepOpacity: Float? = null
+
+    modifier.foldIn(Unit) { _, el ->
+        if (el is SliderStyleModifier) {
+            styleActiveTrack = el.activeTrackColor ?: styleActiveTrack
+            styleInactiveTrack = el.inactiveTrackColor ?: styleInactiveTrack
+            styleThumbColor = el.thumbColor ?: styleThumbColor
+            styleStepColor = el.stepColor ?: styleStepColor
+            styleStepOpacity = el.stepOpacity ?: styleStepOpacity
+        }
+        Unit
+    }
+
+    // --- DETERMINE FINAL COLORS AND VALUES ---
+    val finalActiveTrackColor = styleActiveTrack ?: driftColors.accent
+    val finalInactiveTrackColor = styleInactiveTrack ?: driftColors.fieldBackground
+    val finalThumbColor = styleThumbColor ?: driftColors.accent
+    val finalStepColor = styleStepColor ?: styleActiveTrack ?: driftColors.accent // Default step color to active track
+
+    // Apply Opacity to the step color if set
+    val stepsColorWithOpacity = finalStepColor.copy(alpha = styleStepOpacity ?: 0.54f) // Default step opacity is usually 54%
+
+    // --- CONVERSION LOGIC ---
+    val floatValue = value.toFloat()
+    val floatRange = range.first.toFloat()..range.last.toFloat()
+    val stepsCount = if (step > 0) ((range.last - range.first) / step) else 0
+
+    // --- RENDER SLIDER ---
+    androidx.compose.material3.Slider(
+        value = floatValue,
+        onValueChange = { newValue -> onValueChange(newValue.toInt()) },
+        modifier = modifier.fillMaxWidth(),
+        valueRange = floatRange,
+        steps = stepsCount,
+        colors = SliderDefaults.colors(
+            activeTrackColor = finalActiveTrackColor,
+            inactiveTrackColor = finalInactiveTrackColor,
+            thumbColor = finalThumbColor,
+            activeTickColor = stepsColorWithOpacity,
+            inactiveTickColor = stepsColorWithOpacity // Use the same color for both
+        ),
+        // Applying thumb size requires a custom track and thumb composable, which is complex.
+        // We can pass the size to colors or rely on the theme, but for now, we leave it in the styling struct.
+    )
+}
+
+// In Layout.kt (Replace your existing SwiftUI-style Slider overload)
+
+@Composable
+fun Slider(
+    value: State<Int>, // Now uses State<Int>
+    range: IntRange = 0..100, // Uses standard IntRange
+    step: Int = 0,
+    modifier: Modifier = Modifier
+) {
+    // Delegates to the primary implementation using the State<Int> binding
+    val b = value.binding()
+    Slider(
+        value = b.value,
+        onValueChange = b.set,
+        range = range,
+        step = step,
+        modifier = modifier
+    )
+}
 //------------------------------------------------------------------------------------------------
 // MARK: Toolbar Below
 //------------------------------------------------------------------------------------------------
