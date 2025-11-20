@@ -82,6 +82,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.core.view.WindowCompat
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.dp
+
+
+
 
 // ---------------------------------------------------------------------------------------------
 // COLORS (SwiftUI-style)
@@ -304,6 +312,16 @@ fun Modifier.frame(
 }
 
 
+// ---------------------------------------------------------------------------------------------
+// OFFSET (SwiftUI-style)
+// ---------------------------------------------------------------------------------------------
+fun Modifier.offset(x: Int = 0, y: Int = 0): Modifier =
+    this.then(
+        Modifier.graphicsLayer {
+            translationX = x.dp.toPx()
+            translationY = y.dp.toPx()
+        }
+    )
 
 // ---------------------------------------------------------------------------------------------
 // FONT SYSTEM + TEXT
@@ -850,6 +868,11 @@ private data class ToolbarStyleModifier(
     val contentPadding: Dp? = null
 ) : Modifier.Element
 
+private data class ToolbarLayoutModifier(val layoutModifier: Modifier) : Modifier.Element
+
+fun Modifier.toolbarLayout(modifier: Modifier): Modifier =
+    this.then(ToolbarLayoutModifier(modifier))
+
 fun Modifier.toolbarStyle(
     foregroundColor: Color? = null,
     backgroundColor: Color? = null,
@@ -1170,7 +1193,12 @@ fun NavigationStack(
                 LocalToolbarElevation provides navToolbarElev,
                 LocalToolbarContentPadding provides navToolbarPadding
             ) {
-                Column(Modifier.fillMaxSize()) {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .windowInsetsPadding(WindowInsets(0, 0, 0, 0))
+                )
+                {
                     // decide whether toolbar should be shown:
                     val shouldShowToolbar = toolbarItems.isNotEmpty() || (navController.canPop() && !hideBackButton)
 
