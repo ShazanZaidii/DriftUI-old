@@ -1,6 +1,6 @@
 Till now it supports SwiftUI like: 
 1. H,V and ZStacks -Same syntax, but you can wrap these in DriftView{} to center align and start modifying as in SwiftUI
-2. Paddings Example- Text("hello", Modifier.padding(leading = 20)
+2. Paddings Example- Text("hello", Modifier.padding(leading = 20) <h3> Note: Paddings can't be negative </h3>
 3. Background & Color
 4. Shapes, ClipShape - Remember clipShape should be used before giving a background color
 5. Frame
@@ -131,13 +131,37 @@ NavigationStack(Modifier.toolbarStyle(foregroundColor = Color.shazan, background
 
     }
 ```
-17. Toggle:
+17. Toggle: [Can accept modifiers- onColor, offColor, & thumbColor]
 ```
+// Type 1:
+Toggle("Simple", value = wifi)
+
+//Type 2: (Advanced toggle to style Label:- [For an advanced toggle ypu have to do var_name.binding()]
 val wifi = State(true)
 Toggle(value = wifi.binding(), Modifier.padding(top = 5)){
                     Text("Switch", Modifier.font(system(size =18, weight = bold)))
                 }
-Text("Current value is- ${wifi.value}")
+
+// Type 3: (Simple with custom Toggle color Modifiers) :
+Toggle("Hello", value = wifi, Modifier.toggleStyle(onColor = Color.Magenta, offColor = Color.Transparent, thumbColor = Color.Green) )
+
+// Type 4: (Advanced with custom Toggle color Modifiers)
+Toggle(value = wifi.binding(), Modifier.toggleStyle(onColor = Color.teal, offColor = Color.gray, thumbColor = Color.DarkGray).padding(bottom = 120)){
+                    Text("Switch", Modifier.foregroundStyle(Color.white))
+                }
+
+
+//                       To access the underlying value of the variable wifi-
+                         Text("Current value is- ${wifi.value}")
+
+
+```
+
+18. ScaleEffect & Offsets: (Yes, offsets can be negative too, Below is an example of how to use offsets and scaleEffect inside a Toggle):
+```
+Toggle(value = wifi.binding(), Modifier.padding(top = 5).scaleEffect(2)){
+       Text("Switch", Modifier.font(system(size =18, weight = bold)).offset(x = 10))
+                }
 ```
 Steps to Use DriftUI:
 1. Create a new Module of type Android Library
