@@ -134,11 +134,12 @@ NavigationStack(Modifier.toolbarStyle(foregroundColor = Color.shazan, background
 17. Toggle: [Can accept modifiers- onColor, offColor, & thumbColor]
 ```
 // Type 1:
+val wifi = State(true)
 Toggle("Simple", value = wifi)
 
-//Type 2: (Advanced toggle to style Label:- [For an advanced toggle ypu have to do var_name.binding()]
+//Type 2:
 val wifi = State(true)
-Toggle(value = wifi.binding(), Modifier.padding(top = 5)){
+Toggle(value = wifi, Modifier.padding(top = 5)){
                     Text("Switch", Modifier.font(system(size =18, weight = bold)))
                 }
 
@@ -146,7 +147,7 @@ Toggle(value = wifi.binding(), Modifier.padding(top = 5)){
 Toggle("Hello", value = wifi, Modifier.toggleStyle(onColor = Color.Magenta, offColor = Color.Transparent, thumbColor = Color.Green) )
 
 // Type 4: (Advanced with custom Toggle color Modifiers)
-Toggle(value = wifi.binding(), Modifier.toggleStyle(onColor = Color.teal, offColor = Color.gray, thumbColor = Color.DarkGray).padding(bottom = 120)){
+Toggle(value = wifi, Modifier.toggleStyle(onColor = Color.teal, offColor = Color.gray, thumbColor = Color.DarkGray).padding(bottom = 120)){
                     Text("Switch", Modifier.foregroundStyle(Color.white))
                 }
 
@@ -157,11 +158,41 @@ Toggle(value = wifi.binding(), Modifier.toggleStyle(onColor = Color.teal, offCol
 
 ```
 
-18. ScaleEffect & Offsets: (Yes, offsets can be negative too, Below is an example of how to use offsets and scaleEffect inside a Toggle):
+18. ScaleEffect, RotationEffect & Offsets: (Yes, offsets can be negative too, Below is an example of how to use offsets and scaleEffect inside a Toggle):
 ```
-Toggle(value = wifi.binding(), Modifier.padding(top = 5).scaleEffect(2)){
-       Text("Switch", Modifier.font(system(size =18, weight = bold)).offset(x = 10))
-                }
+ Toggle("Hello", value = wifi, Modifier
+.padding(top= 220)
+.toggleStyle(onColor = Color.Magenta, offColor = Color.Transparent, thumbColor = Color.Green)
+.rotationEffect(degrees = 180)
+.scaleEffect(3))
+
+```
+
+19. Opacity:
+```
+Text("Shazan", Modifier.foregroundStyle(Color.white).font(system(size = 37)).zIndex(1f).padding(top = 90).opacity(0.5))
+
+```
+20. Sliders:
+```
+Type1: Simple (no modifiers)
+var size = State(10)
+Slider(value = size)
+
+Type2: [Advanced]
+var volume = State(50)
+Slider(
+       value = volume,
+       range = 0..200,
+       step = 10,
+       Modifier.sliderStyle(
+       activeTrackColor = Color.shazan,
+       thumbColor = Color.teal,
+       stepColor = Color.white,
+       stepOpacity = 0.05)
+       .frame(width = 250, height = 30)
+        )
+
 ```
 Steps to Use DriftUI:
 1. Create a new Module of type Android Library
