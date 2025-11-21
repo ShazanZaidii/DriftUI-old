@@ -92,10 +92,23 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material3.ShapeDefaults.Large
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.provides
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
+// Add to your IMPORTS section at the top of the file
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.rememberStandardBottomSheetState
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.platform.LocalConfiguration
+import kotlin.math.abs
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.platform.LocalConfiguration
 
 // ---------------------------------------------------------------------------------------------
 // COLORS (SwiftUI-style)
@@ -400,6 +413,14 @@ fun Modifier.offset(x: Int = 0, y: Int = 0): Modifier =
         }
     )
 
+fun Modifier.offset(x: Dp = 0.dp, y: Dp = 0.dp): Modifier =
+    this.then(
+        Modifier.graphicsLayer {
+            translationX = x.toPx()
+            translationY = y.toPx()
+        }
+    )
+
 
 
 // --- rotationEffect clean overloads ---
@@ -471,6 +492,57 @@ private data class FontModifier(val font: SystemFont) : Modifier.Element
 private data class ForegroundColorModifier(val color: Color) : Modifier.Element
 
 private data class BackgroundColorModifier(val color: Color) : Modifier.Element
+
+data class SheetModifier(
+    val isPresented: State<Boolean>,
+    val detents: List<SheetDetent> = listOf(SheetDetent.Large),
+    val initialDetent: SheetDetent = SheetDetent.Large,
+    val showGrabber: Boolean = true,
+    val cornerRadius: Int = 20,
+    val allowDismiss: Boolean = true,
+    val content: @Composable () -> Unit
+) : Modifier.Element
+
+
+fun Modifier.sheet(
+    isPresented: State<Boolean>,
+    detents: List<SheetDetent> = listOf(SheetDetent.Large),
+    initialDetent: SheetDetent = SheetDetent.Large,
+    showGrabber: Boolean = true,
+    cornerRadius: Int = 20,
+    allowDismiss: Boolean = true,
+    content: @Composable () -> Unit
+): Modifier = this.then(
+    SheetModifier(
+        isPresented = isPresented,
+        detents = detents,
+        initialDetent = initialDetent,
+        showGrabber = showGrabber,
+        cornerRadius = cornerRadius,
+        allowDismiss = allowDismiss,
+        content = content
+    )
+)
+fun Modifier.sheet(
+    isPresented: State<Boolean>,
+    detents: List<Double>,
+    initialDetent: Double = detents.first(),
+    showGrabber: Boolean = true,
+    cornerRadius: Int = 20,
+    allowDismiss: Boolean = true,
+    content: @Composable () -> Unit
+): Modifier = this.sheet(
+    isPresented = isPresented,
+    detents = detents.map { SheetDetent.Fraction(it.toFloat()) },
+    initialDetent = SheetDetent.Fraction(initialDetent.toFloat()),
+    showGrabber = showGrabber,
+    cornerRadius = cornerRadius,
+    allowDismiss = allowDismiss,
+    content = content
+)
+
+
+
 
 // --- Toggle styling support ---
 private data class ToggleStyleModifier(
@@ -1147,8 +1219,6 @@ val LocalToolbarElevation = compositionLocalOf<Dp?> { null }
 val LocalToolbarContentPadding = compositionLocalOf<Dp?> { null }
 
 // toolbar {} block — collects style from modifier and provides locals for children.
-// CRITICAL: it also writes the *entire* modifier passed to toolbar(...) into the shared LayoutState so
-// NavigationStack's renderer (which lives above the toolbar in the tree) can use it to size the Surface.
 @Composable
 fun toolbar(
     modifier: Modifier = Modifier,
@@ -1190,16 +1260,39 @@ fun toolbar(
         content()
     }
 }
+// ---------------------------------------------------------
+// SHEET SYSTEM (SwiftUI-style)
+// ---------------------------------------------------------
+
+data class SheetState(
+    var isPresented: MutableState<Boolean>,
+    val content: MutableState<(@Composable () -> Unit)?>
+)
+
 
 // ---------------------------
 // Navigation controller
 // ---------------------------
+
 class DriftNavController(private val stack: MutableList<@Composable () -> Unit>) {
-    fun push(screen: @Composable () -> Unit) { stack.add(screen) }
-    fun pop() { if (stack.isNotEmpty()) stack.removeLast() }
-    fun clear() { stack.clear() }
+    fun push(screen: @Composable () -> Unit) {
+        stack.add(screen)
+    }
+
+    fun pop() {
+        if (stack.isNotEmpty()) {
+            stack.removeAt(stack.lastIndex) // API 21+ compatible
+        }
+    }
+
+    fun clear() {
+        stack.clear()
+    }
+
     fun dismiss() = pop()
+
     fun current(): (@Composable () -> Unit)? = stack.lastOrNull()
+
     fun canPop() = stack.isNotEmpty()
 }
 
@@ -1211,7 +1304,9 @@ val LocalNavController = compositionLocalOf<DriftNavController> {
 @Composable
 fun Dismiss(): () -> Unit {
     val nav = LocalNavController.current
-    return { nav.dismiss() }
+    return remember {
+        {nav.dismiss()}
+    }
 }
 
 // ---------------------------
@@ -1354,6 +1449,199 @@ private fun CustomToolbarSurface(
 // ---------------------------
 // NavigationStack (uses CustomToolbarSurface)
 // ---------------------------
+val LocalSheetState = compositionLocalOf<SheetState> {
+    error("SheetState not provided.")
+}
+
+
+
+// Replace your entire SheetHost function with this custom implementation:
+// Add these imports to the top of Layout.kt if not already present:
+// import androidx.compose.foundation.gestures.detectVerticalDragGestures
+// import androidx.compose.ui.platform.LocalConfiguration
+// import kotlin.math.abs
+
+// COMPLETE REPLACEMENT - Copy this ENTIRE function into Layout.kt
+
+// FIXED VERSION - Smooth and responsive with tween animation
+
+@Composable
+fun SheetHost(sheetState: SheetState, sheetModifier: SheetModifier?) {
+    val isPresented by sheetState.isPresented
+    val sheetContent by sheetState.content
+
+    if (!isPresented || sheetContent == null || sheetModifier == null) {
+        return
+    }
+
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+
+    // Calculate detent heights as FRACTIONS (0.0 to 1.0)
+    val detentFractions = remember(sheetModifier.detents) {
+        sheetModifier.detents.map { detent ->
+            when (detent) {
+                is SheetDetent.Fraction -> detent.fraction
+                SheetDetent.Large -> 0.95f
+            }
+        }.sorted()
+    }
+
+    val initialFraction = remember(sheetModifier.initialDetent) {
+        when (val initial = sheetModifier.initialDetent) {
+            is SheetDetent.Fraction -> initial.fraction
+            SheetDetent.Large -> 0.95f
+        }
+    }
+
+    var targetFraction by remember { mutableStateOf(initialFraction) }
+    var dragOffsetPx by remember { mutableStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
+
+    // Smooth tween animation instead of spring
+    val animatedFraction by animateFloatAsState(
+        targetValue = targetFraction,
+        animationSpec = tween(
+            durationMillis = 300,
+            easing = androidx.compose.animation.core.FastOutSlowInEasing
+        ),
+        label = "sheet_fraction"
+    )
+
+    fun snapToNearestDetent() {
+        isDragging = false
+        val dragFraction = dragOffsetPx / screenHeightPx
+        val currentFraction = (targetFraction + dragFraction).coerceIn(0f, 1f)
+
+        val nearest = detentFractions.minByOrNull {
+            kotlin.math.abs(it - currentFraction)
+        } ?: detentFractions.first()
+
+        // Dismiss if dragged below threshold
+        if (currentFraction < detentFractions.first() * 0.6f && sheetModifier.allowDismiss) {
+            sheetState.isPresented.value = false
+        } else {
+            targetFraction = nearest
+        }
+
+        dragOffsetPx = 0f
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Scrim
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.4f))
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) {
+                    if (sheetModifier.allowDismiss) {
+                        sheetState.isPresented.value = false
+                    }
+                }
+        )
+
+        // Calculate actual height - use drag offset directly when dragging
+        val displayFraction = if (isDragging) {
+            (animatedFraction + (dragOffsetPx / screenHeightPx)).coerceIn(0.05f, 1f)
+        } else {
+            animatedFraction.coerceIn(0.05f, 1f)
+        }
+
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(displayFraction)
+                .align(Alignment.BottomCenter)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragStart = {
+                            isDragging = true
+                        },
+                        onDragEnd = {
+                            snapToNearestDetent()
+                        },
+                        onDragCancel = {
+                            isDragging = false
+                            dragOffsetPx = 0f
+                        },
+                        onVerticalDrag = { _, dragAmount ->
+                            // Negative drag = upward = increase height
+                            dragOffsetPx = (dragOffsetPx - dragAmount).coerceIn(
+                                -screenHeightPx * 0.5f,
+                                screenHeightPx * 0.5f
+                            )
+                        }
+                    )
+                },
+            shape = RoundedCornerShape(
+                topStart = sheetModifier.cornerRadius.dp,
+                topEnd = sheetModifier.cornerRadius.dp
+            ),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 8.dp,
+            shadowElevation = 16.dp
+        ) {
+            Column(Modifier.fillMaxWidth()) {
+                // Grabber
+                if (sheetModifier.showGrabber) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(36.dp)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Color.Gray.copy(alpha = 0.4f))
+                        )
+                    }
+                }
+
+                // Content
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    sheetContent?.invoke()
+                }
+            }
+        }
+    }
+}
+// ---------------------------
+// Sheet detent model
+// ---------------------------
+sealed class SheetDetent {
+    data class Fraction(val fraction: Float) : SheetDetent()
+    object Large : SheetDetent()
+    companion object
+}
+
+// Allow direct Double → Fraction detent
+val Double.detent get() = SheetDetent.Fraction(this.toFloat())
+
+// Allow direct Float → Fraction detent
+val Float.detent get() = SheetDetent.Fraction(this)
+
+// Allow direct Int (%) → Fraction detent
+val Int.percentDetent get() = SheetDetent.Fraction(this / 100f)
+
+
+val SheetDetent.Companion.large get() = Large
+fun SheetDetent.Companion.fraction(value: Double) = SheetDetent.Fraction(value.toFloat())
+
+// Replace your entire NavigationStack function with this corrected version:
+
+// Replace your entire NavigationStack function with this corrected version:
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NavigationStack(
@@ -1365,7 +1653,7 @@ fun NavigationStack(
     val navController = remember { DriftNavController(navStack) }
     val currentScreen = navStack.lastOrNull()
 
-    // --- Read navigation title (modifier on this NavigationStack instance) ---
+    // --- Read navigation title ---
     var navTitle: String? = null
     modifier.foldIn(Unit) { _, el ->
         if (el is NavigationTitleModifier) navTitle = el.title
@@ -1386,7 +1674,14 @@ fun NavigationStack(
         Unit
     }
 
-    // --- Read any toolbarStyle applied directly on NavigationStack (nav-level defaults) ---
+    // --- Read sheet() modifier applied to NavigationStack ---
+    var sheetModifier: SheetModifier? = null
+    modifier.foldIn(Unit) { _, el ->
+        if (el is SheetModifier) sheetModifier = el
+        Unit
+    }
+
+    // --- Read any toolbarStyle applied directly on NavigationStack ---
     var navToolbarFg: Color? = null
     var navToolbarBg: Color? = null
     var navToolbarElev: Dp? = null
@@ -1428,19 +1723,43 @@ fun NavigationStack(
 
     MaterialTheme(colorScheme = colors) {
         val toolbarItems = remember { mutableStateListOf<ToolbarEntry>() }
-
-        // A mutable state that toolbar() children will write their full layout modifier into.
-        // NavigationStack reads this value when rendering the toolbar. This allows toolbar(...) (child)
-        // to define exact height/width/clip, while NavigationStack (parent) renders it.
         val toolbarLayoutState = remember { mutableStateOf<Modifier?>(null) }
 
-        // Provide both the toolbar registration list and the nav controller to children
+        // CRITICAL FIX: Create internal sheet state that observes the external state
+        val internalSheetState = remember {
+            SheetState(
+                isPresented = mutableStateOf(false),
+                content = mutableStateOf(null)
+            )
+        }
+
+        // CRITICAL FIX: Continuously sync external state to internal state
+        // This LaunchedEffect will rerun whenever sheetModifier.isPresented.value changes
+        if (sheetModifier != null) {
+            val externalIsPresented by sheetModifier.isPresented
+            LaunchedEffect(externalIsPresented) {
+                println("NavigationStack: External state changed to $externalIsPresented")
+                internalSheetState.isPresented.value = externalIsPresented
+                internalSheetState.content.value = sheetModifier.content
+            }
+
+            // ALSO sync back dismissals from the sheet to the external state
+            val internalIsPresented by internalSheetState.isPresented
+            LaunchedEffect(internalIsPresented) {
+                if (!internalIsPresented && externalIsPresented) {
+                    println("NavigationStack: Sheet was dismissed, syncing back to external")
+                    // Don't sync back - this creates a loop!
+                }
+            }
+        }
+
+        // Provide composition locals
         CompositionLocalProvider(
             LocalToolbarState provides toolbarItems,
             LocalNavController provides navController,
-            LocalToolbarLayoutState provides toolbarLayoutState // parent provides state that child writes into
+            LocalToolbarLayoutState provides toolbarLayoutState,
+            LocalSheetState provides internalSheetState
         ) {
-            // Also provide the nav-level defaults for toolbar style — child toolbar() can override these
             CompositionLocalProvider(
                 LocalToolbarForeground provides navToolbarFg,
                 LocalToolbarBackground provides navToolbarBg,
@@ -1451,17 +1770,13 @@ fun NavigationStack(
                     Modifier
                         .fillMaxSize()
                         .windowInsetsPadding(WindowInsets(0, 0, 0, 0))
-                )
-                {
-                    // decide whether toolbar should be shown:
-                    val shouldShowToolbar = toolbarItems.isNotEmpty() || (navController.canPop() && !hideBackButton)
+                ) {
+                    // Toolbar
+                    val shouldShowToolbar = toolbarItems.isNotEmpty() ||
+                            (navController.canPop() && !hideBackButton)
 
                     if (shouldShowToolbar) {
-                        // Choose layout modifier: toolbar child may have set one into toolbarLayoutState.value.
-                        // Priority: toolbar()'s full modifier (child) > fallback full-width modifier (default).
                         val layoutModifier = toolbarLayoutState.value ?: Modifier.fillMaxWidth()
-
-                        // render our custom toolbar; allow dev to pass modifier to control height/clip/shape etc
                         CustomToolbarSurface(
                             modifier = layoutModifier,
                             navController = navController,
@@ -1471,7 +1786,7 @@ fun NavigationStack(
                         )
                     }
 
-                    // content area (root or pushed screen)
+                    // Content area
                     Box(Modifier.fillMaxSize()) {
                         if (currentScreen == null) content()
                         else currentScreen.invoke()
@@ -1480,7 +1795,11 @@ fun NavigationStack(
             }
         }
 
-        // Clean up on composition leaving
+        // Render the sheet on top of everything
+        // Pass the INTERNAL sheet state (which is being observed)
+        SheetHost(internalSheetState, sheetModifier)
+
+        // Cleanup
         DisposableEffect(Unit) {
             onDispose {
                 toolbarItems.clear()
@@ -1588,7 +1907,6 @@ fun Modifier.onHold(action: () -> Unit): Modifier =
     )
 
 
-// In Layout.kt (Replace the existing untilHold function)
 
 fun Modifier.untilHold(
     onPress: (() -> Unit)? = null, // Action that runs when the screen is pressed down
