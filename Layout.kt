@@ -606,17 +606,20 @@ private data class StepperStyleModifier(
     val buttonColor: Color? = null,
     val buttonForegroundColor: Color? = null,
     val valueColor: Color? = null,
+    val buttonOffset: Dp? = null // New offset property
 ) : Modifier.Element
 
 fun Modifier.stepperStyle(
     buttonColor: Color? = null,
     buttonForegroundColor: Color? = null,
     valueColor: Color? = null,
+    buttonOffset: Int? = null // Accept Int for cleaner usage
 ): Modifier = this.then(
     StepperStyleModifier(
         buttonColor = buttonColor,
         buttonForegroundColor = buttonForegroundColor,
         valueColor = valueColor,
+        buttonOffset = buttonOffset?.dp // Convert Int to Dp
     )
 )
 
@@ -1962,117 +1965,3 @@ fun Modifier.untilHold(
         }
     )
 
-// STEPPER:
-@Composable
-fun Stepper(
-    value: Int,
-    onValueChange: (Int) -> Unit,
-    range: IntRange = 0..100,
-    step: Int = 1,
-    modifier: Modifier = Modifier,
-    label: @Composable RowScope.() -> Unit
-) {
-    // --- READ STYLING ---
-    var styleButtonColor: Color? = null
-    var styleButtonForeground: Color? = null
-    var styleValueColor: Color? = null
-
-    modifier.foldIn(Unit) { _, el ->
-        if (el is StepperStyleModifier) {
-            styleButtonColor = el.buttonColor
-            styleButtonForeground = el.buttonForegroundColor
-            styleValueColor = el.valueColor
-        }
-        Unit
-    }
-
-    // --- FINAL VALUES ---
-    val finalButtonColor = styleButtonColor ?: driftColors.accent
-    val finalButtonFg = styleButtonForeground ?: Color.white
-    val finalValueColor = styleValueColor ?: driftColors.text
-
-    // Base button styling
-    val buttonBaseModifier = Modifier
-        .size(32.dp)
-        .cornerRadius(4)
-        .background(finalButtonColor)
-        .composed {
-            Modifier.clickable(onClick = { /* no-op */ })
-        }
-
-    // Center text modifier
-    val centerValueModifier = Modifier
-        .width(30.dp)
-        .wrapContentHeight(Alignment.CenterVertically)
-        .padding(horizontal = 2.dp)
-        .foregroundStyle(finalValueColor)
-        .font(system(size = 16))
-        .wrapContentSize(Alignment.Center)
-
-    // --- LAYOUT ---
-    Row(
-        modifier = modifier
-            .wrapContentHeight()
-            .fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-
-        // LABEL
-        Row(
-            modifier = Modifier.weight(1f).wrapContentHeight(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            label()
-        }
-
-        // - BUTTON
-        Button(
-            action = {
-                val newValue = (value - step).coerceAtLeast(range.first)
-                onValueChange(newValue)
-            },
-            modifier = buttonBaseModifier
-        ) {
-            Text("-", Modifier.foregroundStyle(finalButtonFg))
-        }
-
-        // VALUE
-        Text(
-            text = "$value",
-            modifier = centerValueModifier
-        )
-
-        // + BUTTON
-        Button(
-            action = {
-                val newValue = (value + step).coerceAtMost(range.last)
-                onValueChange(newValue)
-            },
-            modifier = buttonBaseModifier
-        ) {
-            Text("+", Modifier.foregroundStyle(finalButtonFg))
-        }
-    }
-}
-// NOTE: The Stepper overload (State<Int>) remains correct as it calls this primary function.
-
-
-@Composable
-fun Stepper(
-    value: State<Int>, // Accepts the State delegate
-    range: IntRange = 0..100,
-    step: Int = 1,
-    modifier: Modifier = Modifier,
-    label: @Composable RowScope.() -> Unit
-) {
-    val b = value.binding()
-    Stepper(
-        value = b.value,
-        onValueChange = b.set, // The setter handles the two-way sync
-        range = range,
-        step = step,
-        modifier = modifier,
-        label = label
-    )
-}
