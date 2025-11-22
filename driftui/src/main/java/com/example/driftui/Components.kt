@@ -1,5 +1,5 @@
 package com.example.driftui
-
+//This file is Components.kt
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -34,25 +34,48 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.ui.composed
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.isPressed
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.Canvas as FoundationCanvas // Use alias for standard Canvas
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.consumePositionChange
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.isOutOfBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.Composable
+import androidx.compose.foundation.Canvas as FoundationCanvas // Use alias for standard Canvas
+import androidx.compose.ui.input.pointer.consumePositionChange
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.isOutOfBounds
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.unit.IntSize
+import kotlin.math.max
+import kotlin.math.min
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.Canvas as FoundationCanvas // Use alias for standard Canvas
+import androidx.compose.ui.input.pointer.consumePositionChange
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.max
+import kotlin.math.min
 // --- CUSTOM IMPORTS ---
-import com.example.driftui.driftColors
-import com.example.driftui.center
+import com.example.driftui.Path
 import com.example.driftui.State
-import com.example.driftui.Binding
-import com.example.driftui.SystemFont
-import com.example.driftui.FontModifier
-import com.example.driftui.ForegroundColorModifier
-import com.example.driftui.ToggleStyleModifier
-import com.example.driftui.SliderStyleModifier
-import com.example.driftui.RoundedRectangle
-import com.example.driftui.Capsule
-import com.example.driftui.Circle
-import com.example.driftui.onTapGesture
+// --- CUSTOM IMPORTS ---
 
 
 // ---------------------------------------------------------------------------------------------
@@ -584,4 +607,176 @@ fun ScrollView(
             .verticalScroll(rememberScrollState()),
         content = content
     )
+}
+
+//PenTool:
+
+@Composable
+fun Canvas(
+    modifier: Modifier = Modifier,
+    content: DrawScope.() -> Unit
+) {
+    FoundationCanvas(
+        modifier = modifier,
+        onDraw = content
+    )
+}
+
+@Composable
+fun PenTool(
+    path: State<Path>? = null,
+    color: Color = Color.Black,
+    width: Float = 3f,
+    smooth: Boolean = true,
+    modifier: Modifier = Modifier
+) {
+    // We use a mutable state to force re-composition after every point is added.
+    val lastPointAdded = remember { mutableStateOf(Offset.Zero) }
+
+    val internal = remember { Path() }
+    val actualPath = path?.value ?: internal
+
+    Canvas(
+        modifier = modifier
+            .pointerInput(actualPath) {
+                awaitEachGesture {
+                    val canvasSize = size
+
+                    // 1. Wait for first finger down
+                    val down = awaitFirstDown()
+
+                    // Clamp the starting position to ensure it's inside the bounds
+                    val clampedStart = clampOffset(down.position, canvasSize)
+
+                    actualPath.start(clampedStart)
+                    lastPointAdded.value = clampedStart
+
+                    var change: PointerInputChange
+
+                    // 2. Track all movements until finger lifts
+                    do {
+                        val event = awaitPointerEvent()
+                        change = event.changes.first()
+
+                        if (change.pressed) {
+                            // Clamp the new position to the Canvas bounds
+                            val clampedPosition = clampOffset(change.position, canvasSize)
+
+                            actualPath.lineTo(clampedPosition)
+
+                            // Update state to trigger redraw/recomposition
+                            lastPointAdded.value = clampedPosition
+
+                            change.consumePositionChange()
+                        }
+
+                    } while (change.pressed)
+
+                    // 3. When finger lifts, apply smoothing and finish the stroke
+                    if (smooth) actualPath.smoothAllStrokes()
+
+                    lastPointAdded.value = Offset.Zero
+                    actualPath.finish() // Clear current stroke holder in Path object
+                }
+            }
+
+    ) {
+        // Read lastPointAdded state to ensure this block re-runs.
+        lastPointAdded.value
+
+        drawPath(
+            path = actualPath.toComposePath(),
+            color = color,
+            style = Stroke(width)
+        )
+    }
+}
+
+
+// In Components.kt
+
+// 1. Define the types clearly
+enum class EraserType { Line, Area }
+
+@Composable
+fun EraserTool(
+    path: State<Path>,
+    type: EraserType = EraserType.Area, // Default, but you can change it
+    radius: Float = 30f,
+    modifier: Modifier = Modifier
+) {
+    val forceRecompose = remember { mutableStateOf(0) }
+    val actualPath = path.value
+
+    // State to track the cursor position (for visual feedback)
+    val currentEraserPos = remember { mutableStateOf<Offset?>(null) }
+
+    Canvas(
+        modifier = modifier
+            .fillMaxSize()
+            .pointerInput(actualPath) {
+                awaitEachGesture {
+                    val canvasSize = size
+                    val down = awaitFirstDown()
+                    var change: PointerInputChange? = down
+
+                    while (change != null && change.pressed) {
+                        val currentPos = change.position
+                        val clamped = clampOffset(currentPos, canvasSize)
+
+                        // Update cursor position
+                        currentEraserPos.value = clamped
+
+                        // -------------------------------------------------
+                        // HERE IS THE CHOICE LOGIC
+                        // -------------------------------------------------
+                        val removed = if (type == EraserType.Line) {
+                            // Old behavior: Deletes the entire stroke instantly
+                            actualPath.removeStrokeAt(clamped, radius)
+                        } else {
+                            // New behavior: Cuts the stroke like a real eraser
+                            actualPath.eraseAreaAt(clamped, radius)
+                        }
+
+                        if (removed) {
+                            forceRecompose.value += 1
+                            path.set(actualPath)
+                        }
+
+                        change.consumePositionChange()
+                        val event = awaitPointerEvent()
+                        change = event.changes.firstOrNull()
+                    }
+                    currentEraserPos.value = null
+                }
+            }
+    ) {
+        forceRecompose.value
+
+        // Draw visual cursor
+        currentEraserPos.value?.let { pos ->
+            drawCircle(
+                color = Color.Gray.copy(alpha = 0.2f),
+                radius = radius,
+                center = pos
+            )
+            drawCircle(
+                color = Color.Black.copy(alpha = 0.1f),
+                radius = radius,
+                center = pos,
+                style = Stroke(1f)
+            )
+        }
+    }
+}
+
+/**
+ * Utility function to ensure an Offset remains within the bounds of the Canvas size.
+ */
+private fun clampOffset(offset: Offset, size: IntSize): Offset {
+    val x = offset.x
+    val y = offset.y
+    val clampedX = max(0f, min(x, size.width.toFloat()))
+    val clampedY = max(0f, min(y, size.height.toFloat()))
+    return Offset(clampedX, clampedY)
 }

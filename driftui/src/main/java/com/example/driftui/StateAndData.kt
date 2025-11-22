@@ -1,5 +1,5 @@
 package com.example.driftui
-
+//This file is StateAndData.kt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
@@ -82,3 +82,4 @@ inline fun <reified T : ObservableObject> EnvironmentObject(): T {
 inline fun <reified T : ObservableObject> ObservedObject(noinline factory: () -> T): T {
     return remember { factory() }
 }
+

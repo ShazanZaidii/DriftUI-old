@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment.Companion.Rectangle
 import androidx.compose.ui.graphics.Color
@@ -27,7 +28,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
 
-        TestView()
+        DrawingScreen()
 
         }
     }
@@ -42,7 +43,7 @@ fun MyScreen() {
 
 
     NavigationStack(
-        Modifier.sheet(
+        Modifier.navigationBarBackButtonHidden(true).sheet(
             isPresented = showSheet,
             detents = listOf( 0.5, 0.95),
             initialDetent = 0.5,
@@ -68,37 +69,107 @@ fun MyScreen() {
         DriftView() {
 
 
-                DriftView {
-                    val color = Color.magenta
-                    var value by State(50)
-                    HStack {
-                        ZStack {
-                            RoundedRectangle(width = 50, height = 50, cornerRadius = 8, Modifier.foregroundStyle(color))
-                            Button(action = {
-//                        value.set(value.value + 1)
-                                value = value - 1
-                            }) {
-                                Text("-", Modifier.font(system(size = 27, weight = light)))
-                            }
+
+                    VStack() {
+                        PenTool(color = Color.red, width = 12f, smooth = false)
                         }
 
-                        Text("${value}")
-                        ZStack {
-                            RoundedRectangle(width = 50, height = 50, cornerRadius = 8, Modifier.foregroundStyle(color))
-                            Button(action = {
-//                        value.set(value.value + 1)
-                                value = value + 1
-                            }) {
-                                Text("+")
-                            }
-                        }
                     }
 
-                }
+
             }
         }
 
+
+
+
+
+@Composable
+fun DrawingScreen() {
+
+    val pathState = remember { State(Path()) }
+    val isEraserMode = remember { State(false) }
+
+    DriftView {
+
+        VStack(spacing = 20) {
+
+            // -----------------------------
+            // TOP BAR
+            // -----------------------------
+            HStack(Modifier.padding(horizontal = 20, vertical = 10)) {
+                Text("Drift Draw", Modifier.font(system(24, bold)))
+                Spacer()
+
+                Button(
+                    action = {
+                        pathState.value.clear()
+                        pathState.set(Path())   // Refresh state
+                    }
+                ) {
+                    Text("Clear", Modifier.foregroundStyle(Color.red))
+                }
+            }
+
+
+
+            // -----------------------------
+            // DRAWING AREA
+            // -----------------------------
+            ZStack(
+                Modifier
+                    .frame(300, maxHeight = 400)
+                    .background(Color.white)
+                    .cornerRadius(20)
+                    .shadow(10)
+                    .padding(20)
+            ) {
+
+                // DRAW TOOL
+                PenTool(
+                    path = pathState,
+                    color = Color.black,
+                    width = 5f,
+                    smooth = true,
+                    modifier = Modifier
+                        .frame(300, 400)
+                )
+
+                // ERASER OVERLAY
+                if (isEraserMode.value) {
+                    EraserTool(
+                        path = pathState,
+                        radius = 30f,
+                        type = EraserType.Area,
+                        modifier = Modifier
+                            .frame(300, 400)
+                    )
+                }
+            }
+
+
+            // -----------------------------
+            // CONTROLS
+            // -----------------------------
+            HStack(spacing = 20) {
+
+                Toggle("Eraser Mode", value = isEraserMode, Modifier.padding(bottom = 30))
+
+                Capsule(width = 10, height = 10, Modifier.foregroundStyle(
+                    if (isEraserMode.value) Color.red else Color.green
+                ).padding(bottom = 30))
+
+
+                Text(
+                    if (isEraserMode.value) "Erasing" else "Drawing",
+                    Modifier.font(system(14, medium))
+                        .foregroundStyle(Color.gray).padding(bottom = 30)
+                )
+            }
+
         }
+    }
+}
 
 
 

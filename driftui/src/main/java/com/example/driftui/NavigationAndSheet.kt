@@ -1,5 +1,5 @@
 package com.example.driftui
-
+//This file is NavigationSheet.kt
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -506,6 +506,25 @@ fun NavigationStack(
     var navToolbarElev: Dp? = null
     var navToolbarPadding: Dp? = null
 
+
+    // Lifecycle variables to hold the actions (Insert these variables)
+    var onAppearAction: (() -> Unit)? = null
+    var onDisappearAction: (() -> Unit)? = null
+
+    modifier.foldIn(Unit) { _, el ->
+        if (el is NavigationTitleModifier) navTitle = el.title
+        else if (el is BackButtonHiddenModifier) hideBackButton = el.hidden
+        else if (el is PreferredColorSchemeModifier) overrideScheme = el.scheme
+        else if (el is SheetModifier) sheetModifier = el
+        else if (el is ToolbarStyleModifier) { /* ... */ }
+
+        // NEW: Extract Lifecycle Actions (Insert these lines)
+        else if (el is LifecycleAppearModifier) onAppearAction = el.action
+        else if (el is LifecycleDisappearModifier) onDisappearAction = el.action
+        Unit
+    }
+
+
     modifier.foldIn(Unit) { _, el ->
         if (el is ToolbarStyleModifier) {
             if (el.foreground != null) navToolbarFg = el.foreground
@@ -571,6 +590,18 @@ fun NavigationStack(
                 if (!internalIsPresented && externalState.value) {
                     externalSetter(false)
                 }
+            }
+        }
+
+        // 3. --- LIFECYCLE HOOKS ---
+        // DisposableEffect runs cleanup (onDispose) before the content leaves the Composition
+        DisposableEffect(currentScreen) {
+            // 3a. Run onAppear when the screen *starts* composing
+            onAppearAction?.invoke()
+
+            // 3b. Run onDisappear when the screen *leaves* the Composition
+            onDispose {
+                onDisappearAction?.invoke()
             }
         }
 

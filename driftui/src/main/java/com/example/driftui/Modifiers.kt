@@ -1,5 +1,5 @@
 package com.example.driftui
-
+//This file is Modifiers.kt
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -19,8 +19,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.coroutineScope
-
-
+import androidx.compose.ui.draw.shadow // For the shadow implementation
+import androidx.compose.foundation.border // For the border implementation
+import androidx.compose.ui.geometry.Offset
 // --- CUSTOM CLASS IMPORTS (for defining modifier elements) ---
 import com.example.driftui.SheetDetent
 import com.example.driftui.State
@@ -140,6 +141,53 @@ fun Modifier.scaleEffect(scale: Float): Modifier =
         scaleX = scale
         scaleY = scale
     })
+
+
+// ---------------------------------------------------------------------------------------------
+// SHADOW AND BORDER MODIFIERS
+// ---------------------------------------------------------------------------------------------
+
+
+fun Modifier.border(color: Color, width: Int): Modifier =
+    this.then(Modifier.border(width.dp, color))
+
+
+fun Modifier.shadow(
+    radius: Int,
+    color: Color = Color.Black.copy(alpha = 0.5f),
+    x: Int = 0,
+    y: Int = 0
+): Modifier =
+    this.then(
+        Modifier.shadow(
+            elevation = radius.dp,
+            shape = androidx.compose.ui.graphics.RectangleShape,
+            ambientColor = color,
+            spotColor = color
+        )
+            .offset(x = x.dp, y = y.dp)
+    )
+
+
+// ---------------------------------------------------------------------------------------------
+// LIFECYCLE MODIFIERS (onAppear / onDisappear)
+// ---------------------------------------------------------------------------------------------
+
+// Modifiers used in NavigationStack to trigger actions on Composition start/end
+data class LifecycleAppearModifier(val action: () -> Unit) : Modifier.Element
+data class LifecycleDisappearModifier(val action: () -> Unit) : Modifier.Element
+
+
+fun Modifier.onAppear(action: () -> Unit): Modifier =
+    this.then(LifecycleAppearModifier(action))
+
+
+fun Modifier.onDisappear(action: () -> Unit): Modifier =
+    this.then(LifecycleDisappearModifier(action))
+
+
+
+// Opacity:
 
 fun Modifier.opacity(value: Double): Modifier =
     this.then(
@@ -421,3 +469,10 @@ fun Modifier.untilHold(
             }
         }
     )
+
+//Pen Tool:
+data class DrawModifier(val onDraw: (Offset) -> Unit) : Modifier.Element
+data class DrawEndModifier(val onEnd: () -> Unit) : Modifier.Element
+
+fun Modifier.onDraw(action: (Offset) -> Unit): Modifier = this.then(DrawModifier(action))
+fun Modifier.onDrawEnd(action: () -> Unit): Modifier = this.then(DrawEndModifier(action))

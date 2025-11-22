@@ -19,6 +19,7 @@ import com.example.driftui.*
 @Composable
 fun TestView(){
     val showSheet = State(false)
+    val dismiss = Dismiss()
     NavigationStack(
         Modifier.sheet(
             isPresented = showSheet,
@@ -54,6 +55,16 @@ fun TestView(){
             }
         }
         toolbar(Modifier.frame(height = 110)) {
+            ToolbarItem(placement = ToolbarPlacement.Leading) {
+
+                    Button(action = {
+                        dismiss
+                        dismiss
+                    }) {
+                        Text("home", Modifier.padding(top = 26))
+                    }
+
+            }
             ToolbarItem(placement = ToolbarPlacement.Center) {
                 Text("Toolbar", Modifier
                     .padding(top = 55)

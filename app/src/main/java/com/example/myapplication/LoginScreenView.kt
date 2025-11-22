@@ -12,8 +12,9 @@ import com.example.driftui.* // Imports most public classes/functions
 fun LoginScreenView() {
 
     val viewModel: LoginViewModel = StateObject()
+    val dismiss = Dismiss()
 
-    NavigationStack(Modifier.preferredColorScheme(lightMode).navigationBarBackButtonHidden(true)) {
+    NavigationStack(Modifier.preferredColorScheme(lightMode).navigationBarBackButtonHidden(true).toolbarStyle(backgroundColor = Color.shazan)) {
         DriftView {
             VStack(
                 spacing = 16,
@@ -70,9 +71,12 @@ fun LoginScreenView() {
                 }
 
 // or styled:
-                toolbar(Modifier.toolbarStyle(backgroundColor = Color.black)) {
-                    ToolbarItem(ToolbarPlacement.Leading) { Text("Home") }
-                    ToolbarItem(ToolbarPlacement.Trailing) { Text("Next") }
+                toolbar(Modifier.toolbarStyle(backgroundColor = Color.black).frame(height = 85)) {
+                    ToolbarItem(ToolbarPlacement.Leading) { NavigationLink(destination = {MyScreen()}) { Text("Home", Modifier.font(system(size = 18,light)).foregroundStyle(Color.white).padding(top = 32)) } }
+                    ToolbarItem(ToolbarPlacement.Trailing) { NavigationLink(destination = {TestView()}) { Text("Next", Modifier.font(system(size = 18,light)).foregroundStyle(Color.white).padding(top = 32)) }}
+                    ToolbarItem(placement = ToolbarPlacement.Center) {
+                        Text("Dismiss", Modifier.onTapGesture(dismiss).padding(top = 26))
+                    }
                 }
 
 
